@@ -56,13 +56,13 @@ PROG_W  = 1.0 - PROG_X       # = 0.460
 
 # ─── 左カラム内部マージン ────────────────────────────────────────────────
 
-LC_PAD_L = 0.016   # 左パディング (canvas_width 比)
+LC_PAD_L = 0.030   # 左パディング (canvas_width 比)
 LC_PAD_R = 0.012   # 右パディング
 
 # ─── プログラムエリア内部マージン ────────────────────────────────────────
 
 PROG_PAD_L = 0.011
-PROG_PAD_R = 0.008
+PROG_PAD_R = 0.020
 
 # ─── プログラムエリア縦範囲 ──────────────────────────────────────────────
 
@@ -88,12 +88,20 @@ FS_FOOTER      = 0.016   # フッター文字
 FS_PROG_TIME   = 0.021   # プログラム時刻 ("19:00 - 19:20")
 FS_PROG_BADGE  = 0.017   # 小バッジ文字
 FS_PROG_TITLE  = 0.024   # 発表タイトル
-FS_PRESENTER   = 0.015   # 所属
+FS_PRESENTER   = 0.018   # 所属
 FS_PRES_NAME   = 0.021   # 発表者氏名
 FS_SANSHUUHI   = 0.030   # 参加費無料
 
 FS_V_TITLE     = 0.075   # 縦書きタイトル文字 (正規化高さ)
 FS_V_YEAR      = 0.022   # 縦書き年度文字
+
+# ─── セクション別コンテンツスケール ──────────────────────────────────────
+# 第1部・第2部: 0.90（やや小さく）, 第3部: 1.10（やや大きく）
+SECTION_CONTENT_SCALES = [0.90, 0.90, 1.10]
+
+# タイトルブロック高さ乗数（フォントが小さいほど行間余白が詰まるため補正）
+# cs=0.90 のとき 1.35、cs=1.10 のとき 1.20 で視覚的な余白を統一
+SECTION_TITLE_MULTIPLIERS = [1.20, 1.20, 1.20]
 
 # ─── バッジサイズ (normalized) ───────────────────────────────────────────
 
@@ -139,9 +147,13 @@ class LayoutEngine:
             if si > 0:
                 blocks.append(Block("gap", 0, 0.014 * scale, {"scale": scale}))
 
+            # セクション別コンテンツスケール（タイトル・所属・氏名のみ適用）
+            cs = SECTION_CONTENT_SCALES[si] if si < len(SECTION_CONTENT_SCALES) else 1.0
+            tm = SECTION_TITLE_MULTIPLIERS[si] if si < len(SECTION_TITLE_MULTIPLIERS) else 1.2
+
             # 時刻ヘッダー
             if sec.time_start and sec.time_end:
-                blocks.append(Block("section_time", 0, FS_PROG_TIME * scale * 1.7, {
+                blocks.append(Block("section_time", 0, FS_PROG_TIME * scale * 1.3, {
                     "text": f"{sec.time_start}  -  {sec.time_end}",
                     "part_label": sec.label,
                     "part_idx": si,
@@ -158,25 +170,28 @@ class LayoutEngine:
                     "scale": scale,
                 }))
 
-                # タイトル（行数推定）
-                title_lines = max(1, len(item.title) // 18 + 1)
-                blocks.append(Block("title", 0, FS_PROG_TITLE * scale * 1.4 * title_lines, {
+                # タイトル行数推定（prog_w ≈ 341px, 27px/char → 約13文字/行）
+                title_lines = max(1, len(item.title) // 13 + 1)
+                blocks.append(Block("title", 0, FS_PROG_TITLE * scale * tm * title_lines * cs, {
                     "text": item.title,
                     "scale": scale,
+                    "content_scale": cs,
                     "lines": title_lines,
                 }))
 
                 # 所属
                 aff_lines = max(1, len(item.affiliation) // 20 + 1)
-                blocks.append(Block("affiliation", 0, FS_PRESENTER * scale * 1.35 * aff_lines, {
+                blocks.append(Block("affiliation", 0, FS_PRESENTER * scale * 1.35 * aff_lines * cs, {
                     "text": item.affiliation,
                     "scale": scale,
+                    "content_scale": cs,
                 }))
 
                 # 氏名
-                blocks.append(Block("name", 0, FS_PRES_NAME * scale * 1.5, {
+                blocks.append(Block("name", 0, FS_PRES_NAME * scale * 1.5 * cs, {
                     "text": item.presenter_name,
                     "scale": scale,
+                    "content_scale": cs,
                 }))
 
         return blocks

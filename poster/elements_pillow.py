@@ -266,11 +266,20 @@ def draw_mc_section(draw: ImageDraw.ImageDraw,
     h_aff = draw_text_multiline(draw, lines, font_aff, x, cur_y, DARK_BROWN, 1.2)
     cur_y += h_aff
 
-    # 氏名 + 先生
+    # 氏名（太字）+ 先生（レギュラー・小さめ）を右寄せで組み合わせ描画
     font_nm = get_pillow_font("Bold", fs_name)
-    name_text = person.name + " 先生"
-    lines = wrap_text_jp(draw, name_text, font_nm, w)
-    h_nm = draw_text_multiline(draw, lines, font_nm, x, cur_y, DARK_BROWN, 1.2)
+    fs_sensei = max(8, int(fs_name * 0.85))
+    font_sensei = get_pillow_font("Regular", fs_sensei)
+    right_margin = int(fs_name * 1.0)
+    right_edge = x + w - right_margin
+    nm_w, nm_h = get_text_size(draw, person.name, font_nm)
+    ss_w, ss_h = get_text_size(draw, " 先生", font_sensei)
+    line_h = max(nm_h, ss_h)
+    draw.text((right_edge - nm_w - ss_w, cur_y + (line_h - nm_h)),
+              person.name, fill=DARK_BROWN, font=font_nm)
+    draw.text((right_edge - ss_w, cur_y + (line_h - ss_h)),
+              " 先生", fill=DARK_BROWN, font=font_sensei)
+    h_nm = int(line_h * 1.2)
     cur_y += h_nm
 
     return cur_y - y
@@ -536,12 +545,26 @@ def draw_presenter(draw: ImageDraw.ImageDraw,
     cur_y = y
 
     lines = wrap_text_jp(draw, affiliation, font_a, w)
-    h1 = draw_text_multiline(draw, lines, font_a, x, cur_y, DARK_BROWN, 1.25)
+    h1 = draw_text_multiline(draw, lines, font_a, x, cur_y, DARK_BROWN, 1.25,
+                              align="right", max_w=w)
     cur_y += h1
 
-    name_text = name + " 先生" if name and not name.endswith("先生") else name
-    lines = wrap_text_jp(draw, name_text, font_n, w)
-    h2 = draw_text_multiline(draw, lines, font_n, x, cur_y, DARK_BROWN, 1.25)
+    # 氏名（太字）+ 先生（レギュラー・小さめ）を右寄せで組み合わせ描画
+    if name and not name.endswith("先生"):
+        fs_sensei = max(8, int(fs_name * 0.85))
+        font_sensei = get_pillow_font("Regular", fs_sensei)
+        nm_w, nm_h = get_text_size(draw, name, font_n)
+        ss_w, ss_h = get_text_size(draw, " 先生", font_sensei)
+        line_h = max(nm_h, ss_h)
+        draw.text((x + w - nm_w - ss_w, cur_y + (line_h - nm_h)),
+                  name, fill=DARK_BROWN, font=font_n)
+        draw.text((x + w - ss_w, cur_y + (line_h - ss_h)),
+                  " 先生", fill=DARK_BROWN, font=font_sensei)
+        h2 = int(line_h * 1.25)
+    else:
+        lines = wrap_text_jp(draw, name, font_n, w)
+        h2 = draw_text_multiline(draw, lines, font_n, x, cur_y, DARK_BROWN, 1.25,
+                                  align="right", max_w=w)
     cur_y += h2
 
     return cur_y - y

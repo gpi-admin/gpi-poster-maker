@@ -80,8 +80,8 @@ def draw_text_multiline(draw: ImageDraw.ImageDraw, lines: list,
                          max_w: int = None) -> int:
     """
     複数行テキストを描画し、合計高さ（px）を返す。
-    align: "left" | "center"
-    max_w: center揃えのとき使用
+    align: "left" | "center" | "right"
+    max_w: center/right揃えのとき使用
     """
     _, ch = get_text_size(draw, "あ", font)
     line_h = int(ch * line_spacing)
@@ -90,6 +90,8 @@ def draw_text_multiline(draw: ImageDraw.ImageDraw, lines: list,
         lw, _ = get_text_size(draw, line, font)
         if align == "center" and max_w:
             lx = x + (max_w - lw) // 2
+        elif align == "right" and max_w:
+            lx = x + max_w - lw
         else:
             lx = x
         draw.text((lx, cur_y), line, fill=fill, font=font)

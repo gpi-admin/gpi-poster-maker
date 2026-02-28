@@ -222,6 +222,7 @@ def render_poster(data: PosterData, scale: float = 1.0) -> Image.Image:
     for block in layout:
         by = ph(block.y)
         sc = block.data.get("scale", 1.0)
+        cs = block.data.get("content_scale", 1.0)   # セクション別スケール
 
         if block.kind == "section_time":
             draw_section_time(draw, prog_x, by,
@@ -241,10 +242,10 @@ def render_poster(data: PosterData, scale: float = 1.0) -> Image.Image:
         elif block.kind == "title":
             draw_content_title(draw, prog_x, by, prog_w,
                                 block.data["text"],
-                                int(ph(FS_PROG_TITLE) * sc))
+                                int(ph(FS_PROG_TITLE) * sc * cs))
 
         elif block.kind == "affiliation":
-            font_a = get_pillow_font("Regular", int(ph(FS_PRESENTER) * sc))
+            font_a = get_pillow_font("Regular", int(ph(FS_PRESENTER) * sc * cs))
             from poster.text_utils import wrap_text_jp, draw_text_multiline
             lines = wrap_text_jp(draw, block.data["text"], font_a, prog_w)
             draw_text_multiline(draw, lines, font_a, prog_x, by, DARK_BROWN, 1.25)
@@ -252,8 +253,8 @@ def render_poster(data: PosterData, scale: float = 1.0) -> Image.Image:
         elif block.kind == "name":
             draw_presenter(draw, prog_x, by, prog_w,
                             "", block.data["text"],
-                            int(ph(FS_PRESENTER) * sc),
-                            int(ph(FS_PRES_NAME) * sc))
+                            int(ph(FS_PRESENTER) * sc * cs),
+                            int(ph(FS_PRES_NAME) * sc * cs))
 
     # ─── 右ストリップ: 第N部ラベルボックス ──────────────────────────────
     for i, pos in enumerate(section_positions):
