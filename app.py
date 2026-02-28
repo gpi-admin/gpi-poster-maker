@@ -628,19 +628,27 @@ elif step == "7. イラスト & 出力":
         generate_btn = st.button("🎨 ポスターを生成する", type="primary", use_container_width=True)
 
         if generate_btn:
-            poster_data = _build_poster_data(
-                uploaded_bg, uploaded_decos_files
-            )
-            with st.spinner("ポスターを生成中..."):
+            poster_data = _build_poster_data(uploaded_bg, uploaded_decos_files)
+            with st.spinner("ポスターを生成中（SVG → PNG / PDF）..."):
                 try:
-                    from poster.preview_renderer import render_poster
-                    img = render_poster(poster_data, scale=1.0, transparent_bg=False)
-                    export_img = render_poster(poster_data, scale=1.0, transparent_bg=True)
-                    export_png_buf = io.BytesIO()
-                    export_img.save(export_png_buf, format="PNG")
-                    export_png_buf.seek(0)
-                    st.session_state["preview_img"] = img
-                    st.session_state["export_png_bytes"] = export_png_buf.getvalue()
+                    import importlib
+                    import cairosvg
+                    svg_mod = importlib.import_module("poster.svg_renderer")
+                    svg_mod = importlib.reload(svg_mod)
+                    svg_str = svg_mod.render_poster_svg(poster_data)
+                    svg_bytes = svg_str.encode("utf-8")
+
+                    # プレビュー用 PNG（scale=2）
+                    preview_png = cairosvg.svg2png(bytestring=svg_bytes, scale=2)
+                    # ダウンロード用高解像度 PNG（scale=4 ≈ 300 DPI）
+                    export_png = cairosvg.svg2png(bytestring=svg_bytes, scale=4)
+                    # 印刷用 PDF
+                    export_pdf = cairosvg.svg2pdf(bytestring=svg_bytes)
+
+                    st.session_state["preview_png"] = preview_png
+                    st.session_state["export_png_bytes"] = export_png
+                    st.session_state["export_pdf_bytes"] = export_pdf
+                    st.session_state["svg_str"] = svg_str
                     st.session_state["poster_data"] = poster_data
                     st.success("生成完了！")
                 except Exception as e:
@@ -648,69 +656,33 @@ elif step == "7. イラスト & 出力":
                     import traceback
                     st.code(traceback.format_exc())
 
-        if "preview_img" in st.session_state:
-            st.image(st.session_state["preview_img"], use_column_width=True)
+        if "preview_png" in st.session_state:
+            st.image(st.session_state["preview_png"], use_column_width=True)
 
-            dl_col1, dl_col2 = st.columns(2)
+            year = st.session_state["year"]
+            num = st.session_state["session_num"]
+            dl_col1, dl_col2, dl_col3 = st.columns(3)
             with dl_col1:
-                # PNG ダウンロード
-                png_bytes = st.session_state.get("export_png_bytes")
-                if (not png_bytes) and ("poster_data" in st.session_state):
-                    from poster.preview_renderer import render_poster
-                    _export_img = render_poster(
-                        st.session_state["poster_data"], scale=1.0, transparent_bg=True
-                    )
-                    _buf = io.BytesIO()
-                    _export_img.save(_buf, format="PNG")
-                    _buf.seek(0)
-                    png_bytes = _buf.getvalue()
-                    st.session_state["export_png_bytes"] = png_bytes
-                year = st.session_state["year"]
-                num = st.session_state["session_num"]
                 st.download_button(
-                    label="📥 PNG をダウンロード",
-                    data=png_bytes or b"",
+                    label="📥 PNG",
+                    data=st.session_state.get("export_png_bytes", b""),
                     file_name=f"GPI_{year}_{num:02d}.png",
                     mime="image/png",
                     use_container_width=True,
                 )
-
             with dl_col2:
-                # PDF ダウンロード（ベクター・Illustrator 編集可）
-                if st.button("📄 PDF を生成 (印刷用)", use_container_width=True):
-                    with st.spinner("ベクターPDFを生成中..."):
-                        try:
-                            import importlib
-                            pdf_mod = importlib.import_module("poster.pdf_renderer")
-                            pdf_mod = importlib.reload(pdf_mod)
-                            pdf_bytes = pdf_mod.render_poster_pdf(st.session_state["poster_data"])
-                            st.download_button(
-                                label="📥 PDF をダウンロード",
-                                data=pdf_bytes,
-                                file_name=f"GPI_{year}_{num:02d}.pdf",
-                                mime="application/pdf",
-                                use_container_width=True,
-                            )
-                        except Exception as e:
-                            st.error(f"PDF生成エラー: {e}")
-                            import traceback
-                            st.code(traceback.format_exc())
-
-                if st.button("🎨 SVG を生成 (Illustrator編集用)", use_container_width=True):
-                    with st.spinner("SVGを生成中..."):
-                        try:
-                            import importlib
-                            svg_mod = importlib.import_module("poster.svg_renderer")
-                            svg_mod = importlib.reload(svg_mod)
-                            svg_str = svg_mod.render_poster_svg(st.session_state["poster_data"])
-                            st.download_button(
-                                label="📥 SVG をダウンロード (Illustratorで全テキスト編集可)",
-                                data=svg_str.encode("utf-8"),
-                                file_name=f"GPI_{year}_{num:02d}.svg",
-                                mime="image/svg+xml",
-                                use_container_width=True,
-                            )
-                        except Exception as e:
-                            st.error(f"SVG生成エラー: {e}")
-                            import traceback
-                            st.code(traceback.format_exc())
+                st.download_button(
+                    label="📥 PDF (印刷用)",
+                    data=st.session_state.get("export_pdf_bytes", b""),
+                    file_name=f"GPI_{year}_{num:02d}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                )
+            with dl_col3:
+                st.download_button(
+                    label="📥 SVG (Illustrator編集用)",
+                    data=st.session_state.get("svg_str", "").encode("utf-8"),
+                    file_name=f"GPI_{year}_{num:02d}.svg",
+                    mime="image/svg+xml",
+                    use_container_width=True,
+                )
