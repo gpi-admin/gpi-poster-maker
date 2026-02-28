@@ -126,10 +126,11 @@ def draw_venue_info(draw: ImageDraw.ImageDraw,
         h1 = int(bh * 1.25)
     cur_y += h1
 
-    # 部屋名（右寄せ）
+    # 部屋名（右寄せ・やや大きめ）
     if room:
-        lines = wrap_text_jp(draw, room, font_r, w)
-        h2 = draw_text_multiline(draw, lines, font_r, x, cur_y, DARK_BROWN, 1.2,
+        font_room = get_pillow_font("Regular", max(8, int(fs_sm * 1.4)))
+        lines = wrap_text_jp(draw, room, font_room, w)
+        h2 = draw_text_multiline(draw, lines, font_room, x, cur_y, DARK_BROWN, 1.2,
                                   align="right", max_w=w)
         cur_y += h2
 
@@ -139,10 +140,14 @@ def draw_venue_info(draw: ImageDraw.ImageDraw,
 def draw_address(draw: ImageDraw.ImageDraw,
                  x: int, y: int, w: int,
                  address: str, fs: int) -> int:
-    """住所を描画。返値: 使用した高さ"""
+    """住所を描画。住所エリア下に区切り線を引く。返値: 使用した高さ"""
     font = get_pillow_font("Regular", fs)
     lines = wrap_text_jp(draw, address, font, w)
-    return draw_text_multiline(draw, lines, font, x, y, DARK_BROWN, 1.2)
+    h = draw_text_multiline(draw, lines, font, x, y, DARK_BROWN, 1.2)
+    # 住所エリア下に横線（区切り線）
+    line_y = y + h + max(3, int(fs * 0.4))
+    draw.line([(x, line_y), (x + w, line_y)], fill=DARK_BROWN, width=1)
+    return line_y + 2 - y
 
 
 # ─── Zoom セクション ───────────────────────────────────────────────────────
@@ -151,43 +156,19 @@ def draw_zoom_section(draw: ImageDraw.ImageDraw,
                        x: int, y: int, w: int,
                        fs: int, zoom_note: str, theme: dict) -> int:
     """
-    「& zoom ミーティング [icon]」セクションを描画。
+    「ハイブリッド配信あり」を下線付きで描画。
     返値: 使用した高さ（px）
     """
-    color = theme.get("zoom_color", (80, 160, 200))
-    fs_amp = int(fs * 1.5)
-    fs_note = int(fs * 0.90)
-
-    font_amp  = get_pillow_font("Bold", fs_amp)
-    font_zoom = get_pillow_font("Bold", fs_note)
-    font_note = get_pillow_font("Regular", fs_note)
-
-    # "&" 記号
-    draw.text((x, y), "&", fill=DARK_BROWN, font=font_amp)
-    _, amp_h = get_text_size(draw, "&", font_amp)
-    line2_y = y + amp_h + 2
-
-    # Zoom アイコン（色付き角丸正方形に "Z" 文字）
-    icon_sz = int(fs_note * 1.5)
-    r = max(3, icon_sz // 5)
-    try:
-        draw.rounded_rectangle([x, line2_y, x + icon_sz, line2_y + icon_sz],
-                                radius=r, fill=color)
-    except AttributeError:
-        draw.rectangle([x, line2_y, x + icon_sz, line2_y + icon_sz], fill=color)
-    font_z = get_pillow_font("Black", int(icon_sz * 0.65))
-    draw_centered_text(draw, "Z", font_z,
-                        x + icon_sz // 2, line2_y + icon_sz // 2, WHITE)
-
-    # zoom テキスト
-    note_text = zoom_note.lstrip("&").strip() if zoom_note else "zoomミーティング"
-    tx = x + icon_sz + int(fs * 0.35)
-    ty = line2_y + (icon_sz - fs_note) // 2
-    avail_w = w - icon_sz - int(fs * 0.35)
-    lines = wrap_text_jp(draw, note_text, font_note, avail_w)
-    draw_text_multiline(draw, lines, font_note, tx, ty, DARK_BROWN, 1.2)
-
-    return line2_y + icon_sz - y + int(fs * 0.2)
+    text = "ハイブリッドで実施！"
+    font_size = max(10, int(fs * 1.8))
+    font = get_pillow_font("Bold", font_size)
+    indent = max(5, int(font_size * 0.6))
+    tw, th = get_text_size(draw, text, font)
+    draw.text((x + indent, y), text, fill=DARK_BROWN, font=font)
+    # 下線
+    line_y = y + th + 2
+    draw.line([(x + indent, line_y), (x + indent + tw, line_y)], fill=DARK_BROWN, width=2)
+    return line_y + 2 - y
 
 
 # ─── 左カラム: 日付・時刻 ─────────────────────────────────────────────────

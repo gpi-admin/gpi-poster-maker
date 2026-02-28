@@ -193,7 +193,7 @@ def render_poster(data: PosterData, scale: float = 1.0) -> Image.Image:
     cap_line_gap = int(cap_h * 0.3)
     total_cap_h = cap_h * 2 + cap_line_gap
 
-    qr_bottom = footer_y - ph(0.008) - total_cap_h - ph(0.006)
+    qr_bottom = footer_y - ph(0.020) - total_cap_h - ph(0.006)
     max_qr = qr_bottom - cur_y - ph(0.005)
     qr_size = max(ph(0.08), min(lc_w, max_qr))
 
