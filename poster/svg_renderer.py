@@ -72,9 +72,10 @@ _VERTICAL_ROTATE_CHARS = frozenset("ーｰ")
 _RL_GOTHIC = "BIZUDGothic-Regular"
 _RL_MINCHO = "BIZUDMincho-Regular"
 
-# SVG font-family 名（macOS でのシステム名）
-_SVG_GOTHIC = "BIZ UDGothic"
-_SVG_MINCHO = "BIZ UDMincho"
+# SVG font-family 名（macOS システムフォント: ヒラギノ）
+# メトリクス計算は BIZ UD Gothic で代用（CJK 全角文字は等幅のため誤差は小さい）
+_SVG_GOTHIC = "Hiragino Sans"
+_SVG_MINCHO = "Hiragino Mincho ProN"
 
 W = PDF_W
 H = PDF_H
@@ -218,12 +219,17 @@ class SVGCanvas:
         size: float,
         color: tuple,
         transform: str = "",
+        font_weight: str = "",
     ):
         if not content:
             return
+        # font_weight 未指定時: ゴシック・明朝ともに W6(600)
+        if not font_weight:
+            font_weight = "600"
         attrs = (
             f'x="{x:.3f}" y="{baseline_y:.3f}" '
             f'font-family="{_esc(svg_font)}" font-size="{size:.3f}" '
+            f'font-weight="{font_weight}" '
             f'fill="{_hex(color)}"'
         )
         if transform:
@@ -417,10 +423,11 @@ def _draw_vertical_stack(
         cx = x + (strip_w - lw) / 2
         char_top = cur_top + (step - ch) / 2
         if chv in _VERTICAL_ROTATE_CHARS:
-            # 長音符を -90° 回転して縦書き表現
-            center_x = x + strip_w / 2 - size * 0.12
+            # 長音符を +90° 回転して縦書き表現
+            # SVG は Y 軸下向きなので正回転が時計回り（PDF の -90 と逆）
+            center_x = x + strip_w / 2
             center_y = char_top + ch / 2
-            rot = f"rotate(-90, {center_x:.3f}, {center_y:.3f})"
+            rot = f"rotate(90, {center_x:.3f}, {center_y:.3f})"
             baseline = char_top + asc
             c.text(chv, cx, baseline, svg_font, size, color, transform=rot)
         else:
@@ -640,6 +647,9 @@ def render_poster_svg(data: PosterData) -> str:
 
     fs_num = max(10.0, ph(FS_DATE_BIG) * 0.75)
     fs_kana = max(8.0, ph(FS_DATE_BIG) * 0.50)
+    # セグメント間（数字↔漢字）に挿入するスペース
+    seg_gap = max(2.0, ph(FS_DATE_BIG) * 0.22)
+    n_gaps = max(0, len(segs) - 1)
     seg_info = []
     total_sw = 0.0
     max_h = 0.0
@@ -650,10 +660,12 @@ def render_poster_svg(data: PosterData) -> str:
         seg_info.append((txt, is_num, size, asc, h, w_seg))
         total_sw += w_seg
         max_h = max(max_h, h)
+    total_sw += seg_gap * n_gaps
     if total_sw > lc_w and total_sw > 0:
         ratio = lc_w / total_sw
         fs_num = max(8.0, fs_num * ratio)
         fs_kana = max(6.0, fs_kana * ratio)
+        seg_gap = max(1.0, seg_gap * ratio)
         seg_info = []
         total_sw = 0.0
         max_h = 0.0
@@ -666,11 +678,11 @@ def render_poster_svg(data: PosterData) -> str:
             max_h = max(max_h, h)
 
     cur_x = lc_x
-    for txt, _is_num, size, asc, h, w_seg in seg_info:
+    for i, (txt, _is_num, size, asc, h, w_seg) in enumerate(seg_info):
         top = cur_y + (max_h - h)
         baseline = top + asc
         _draw_text_at_baseline(c, txt, cur_x, baseline, _SVG_GOTHIC, size, DARK_BROWN)
-        cur_x += w_seg
+        cur_x += w_seg + (seg_gap if i < len(seg_info) - 1 else 0.0)
     cur_y += max_h + ph(FS_DATE_BIG) * 0.18
 
     time_fs = ph(FS_TIME_LC)
@@ -753,7 +765,7 @@ def render_poster_svg(data: PosterData) -> str:
 
     # QR コード
     cap_fs = ph(FS_QR_CAP)
-    cap2_fs = max(cap_fs + 1.0, cap_fs * 1.12)
+    cap2_fs = max(cap_fs + 1.0, cap_fs * 1.45)
     _, _, cap_h = _fm(_RL_GOTHIC, cap_fs)
     _, _, cap2_h = _fm(_RL_GOTHIC, cap2_fs)
     cap_gap = cap_h * 0.3
