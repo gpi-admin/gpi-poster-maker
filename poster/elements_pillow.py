@@ -29,24 +29,44 @@ def _draw_pill(draw: ImageDraw.ImageDraw,
 
 # ─── ヘッダーバー ──────────────────────────────────────────────────────────
 
+def _draw_text_spaced(draw: ImageDraw.ImageDraw, x: int, y: int,
+                      text: str, font, fill, total_w: int):
+    """テキストを指定幅いっぱいに文字間隔を均等調整して描画する。"""
+    chars = list(text)
+    # 各文字の幅を計測
+    widths = [get_text_size(draw, ch, font)[0] for ch in chars]
+    chars_w = sum(widths)
+    if len(chars) <= 1:
+        draw.text((x, y), text, fill=fill, font=font)
+        return
+    gap = (total_w - chars_w) / (len(chars) - 1)
+    cx = x
+    for ch, cw in zip(chars, widths):
+        draw.text((int(cx), y), ch, fill=fill, font=font)
+        cx += cw + gap
+
+
 def draw_header_bar(canvas: Image.Image, draw: ImageDraw.ImageDraw,
                     h: int, theme: dict):
-    """上部 "Gifu Pediatric-residency Intensives" バー（ダークブラウン背景）"""
+    """上部 "Gifu Pediatric-residency Intensives" バー（テーマカラー背景）"""
     W = canvas.width
-    draw.rectangle([0, 0, W, h], fill=DARK_BROWN)
+    bar_color = theme.get("title_bar", DARK_BROWN)
+    draw.rectangle([0, 0, W, h], fill=bar_color)
     font = get_pillow_font("Regular", max(10, int(h * 0.52)))
-    text = "G i f u   P e d i a t r i c - r e s i d e n c y   I n t e n s i v e s"
-    tw, th = get_text_size(draw, text, font)
-    draw.text(((W - tw) // 2, (h - th) // 2), text, fill=WHITE, font=font)
+    text = "Gifu Pediatric-residency Intensives"
+    pad = max(10, int(W * 0.03))
+    _, th = get_text_size(draw, text, font)
+    _draw_text_spaced(draw, pad, (h - th) // 2, text, font, WHITE, W - pad * 2)
 
 
 # ─── フッターバー ──────────────────────────────────────────────────────────
 
 def draw_footer_bar(canvas: Image.Image, draw: ImageDraw.ImageDraw,
-                    y: int, h: int, email: str):
-    """下部お問い合わせ先フッター"""
+                    y: int, h: int, email: str, theme: dict = None):
+    """下部お問い合わせ先フッター（テーマカラー背景）"""
     W = canvas.width
-    draw.rectangle([0, y, W, y + h], fill=DARK_BROWN)
+    bar_color = theme.get("title_bar", DARK_BROWN) if theme else DARK_BROWN
+    draw.rectangle([0, y, W, y + h], fill=bar_color)
     font = get_pillow_font("Regular", max(8, int(h * 0.40)))
     text = f"お問い合わせ先  岐阜県小児科研修支援グループ  Mail ▶  {email}"
     tw, th = get_text_size(draw, text, font)
@@ -428,23 +448,28 @@ def draw_vertical_title(canvas: Image.Image,
     y_top  = y_top + v_pad
     avail_h = avail_h - 2 * v_pad
 
-    # フォントサイズ: 帯幅の 65% を上限とし、縦幅いっぱいに収まるよう自動調整
+    # フォントサイズ: 帯幅の 88% を上限（従来65%から拡大）
     # 明朝体（ヒラギノ明朝）を使用
-    font_size = min(fs_main, max(10, int(strip_w * 0.65)))
+    font_size = min(fs_main, max(10, int(strip_w * 0.88)))
     font = get_pillow_font_mincho("Bold", font_size)
     _, ch = get_text_size(draw, "あ", font)
 
-    # 縦幅いっぱいに均等配置
-    char_step = max(ch + 2, avail_h // num_chars)
+    # 文字間隔: 文字高さ + 8%（tight spacing）
+    char_gap = max(2, int(ch * 0.08))
+    char_step = ch + char_gap
 
-    # フォントが縦幅に収まらない場合は縮小
-    if (ch + 2) * num_chars > avail_h:
-        font_size = max(8, int(font_size * avail_h / ((ch + 2) * num_chars)))
+    # 縦幅に収まらない場合は比例縮小
+    if char_step * num_chars > avail_h:
+        scale = avail_h / (char_step * num_chars)
+        font_size = max(8, int(font_size * scale))
         font = get_pillow_font_mincho("Bold", font_size)
         _, ch = get_text_size(draw, "あ", font)
-        char_step = avail_h // num_chars
+        char_gap = max(2, int(ch * 0.08))
+        char_step = ch + char_gap
 
-    cur_y = y_top
+    # 縦中央に配置
+    total_title_h = char_step * num_chars
+    cur_y = y_top + (avail_h - total_title_h) // 2
 
     for char in main_title:
         if char in _VERTICAL_ROTATE_CHARS:

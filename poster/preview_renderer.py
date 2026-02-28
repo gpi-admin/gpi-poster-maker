@@ -94,7 +94,7 @@ def render_poster(data: PosterData, scale: float = 1.0) -> Image.Image:
     footer_y = H - footer_h
 
     draw_header_bar(canvas, draw, header_h, theme)
-    draw_footer_bar(canvas, draw, footer_y, footer_h, data.contact_email)
+    draw_footer_bar(canvas, draw, footer_y, footer_h, data.contact_email, theme)
 
     # ─── 縦書きタイトル帯 ────────────────────────────────────────────────
     title_x  = pw(TITLE_X)
