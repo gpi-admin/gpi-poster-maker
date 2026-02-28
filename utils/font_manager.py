@@ -41,12 +41,12 @@ NOTO_URLS = {
 
 # ダウンロード試行フラグ
 _download_attempted = False
-_force_bold_ctx: ContextVar[bool] = ContextVar("force_bold_fonts", default=False)
+_force_bold_ctx: ContextVar[bool] = ContextVar("force_bold_fonts", default=True)
 
 
 @contextmanager
 def force_bold_fonts(enabled: bool = True):
-    """コンテキスト内で get_pillow_font を太字寄りに強制する。"""
+    """コンテキスト内で太字モードの有効/無効を切り替える。"""
     token = _force_bold_ctx.set(bool(enabled))
     try:
         yield

@@ -13,7 +13,7 @@
 | 出力形式 | 解像度 / 品質 | ライブラリ |
 |---------|-------------|-----------|
 | プレビュー (PNG) | 794×1123 px (96 DPI) | Pillow |
-| 本番 PDF | A4 / 300 DPI 相当ラスター埋め込み（透過対応） | ReportLab + Pillow |
+| 本番 PDF | A4 ベクター（Illustrator 編集可 / 透過対応） | ReportLab |
 | 高解像度 PNG | 2480×3508 px (300 DPI) | Pillow |
 
 ---
@@ -113,7 +113,7 @@ GPI_Poster_Maker/
 │   ├── models.py             # PosterData / Section / ContentItem
 │   ├── layout.py             # 正規化座標定数 + LayoutEngine
 │   ├── preview_renderer.py   # Pillow プレビュー描画（96 DPI）
-│   ├── pdf_renderer.py       # PDF 出力（Pillow画像をA4へ埋め込み）
+│   ├── pdf_renderer.py       # PDF 出力（ベクター主体・テキスト編集可）
 │   ├── elements_pillow.py    # Pillow 用描画関数（要素単位）
 │   ├── elements_pdf.py       # ReportLab 用描画関数（要素単位）
 │   ├── text_utils.py         # 日本語テキスト処理（折り返し・フィット）
@@ -352,7 +352,7 @@ python3 test_preview.py
 # PDF 出力確認
 python3 test_pdf.py
 # → test_output.pdf を Adobe Illustrator で開き、
-#   テキスト・楕円バッジが個別選択可能であることを確認
+#   テキスト・図形が個別選択可能であることを確認
 
 # Streamlit アプリ起動
 streamlit run app.py
@@ -377,6 +377,6 @@ streamlit run app.py
 
 - **右ストリップ年度テキストと第N部ボックスは独立して描画**: 年度テキストは step 6、ラベルボックスは step 9 で描画。layout 計算後にのみラベルボックスを描画できる。
 
-- **SECTION_TITLE_MULTIPLIERS の重要性**: `layout.py` の `SECTION_TITLE_MULTIPLIERS` は `draw_content_title` の `line_spacing=1.35` と整合している必要がある。この値を `line_spacing` より小さくすると、LayoutEngine のブロック高さ推定が実際の描画より小さくなり、タイトルと所属が重なるバグが発生する。現在値 `[1.40, 1.40, 1.40]` はわずかに余裕を持たせた設定。
+- **LayoutEngine の実測高さ計算**: タイトル・所属・氏名の高さは文字数推定ではなく実際の折り返し行で計測する。これにより、長文タイトル時でも所属と重ならない。
 
 - **Streamlit 保存/読み込み**: `_export_state()` / `_import_state()` は `with st.sidebar:` ブロックより**前**に定義する必要がある（実行順序の制約）。保存ファイルには `_version: "1.1"` を付与し、旧テーマキーは `_THEME_ALIASES` で自動変換する。

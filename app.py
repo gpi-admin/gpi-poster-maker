@@ -680,8 +680,10 @@ elif step == "7. イラスト & 出力":
                 if st.button("📄 PDF を生成 (Illustrator編集可)", use_container_width=True):
                     with st.spinner("ベクターPDFを生成中..."):
                         try:
-                            from poster.pdf_renderer import render_poster_pdf
-                            pdf_bytes = render_poster_pdf(st.session_state["poster_data"])
+                            import importlib
+                            pdf_mod = importlib.import_module("poster.pdf_renderer")
+                            pdf_mod = importlib.reload(pdf_mod)
+                            pdf_bytes = pdf_mod.render_poster_pdf(st.session_state["poster_data"])
                             st.download_button(
                                 label="📥 PDF をダウンロード",
                                 data=pdf_bytes,
