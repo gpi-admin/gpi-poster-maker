@@ -20,6 +20,11 @@ HIRAGINO_FONTS = {
 }
 HIRAGINO_BLACK_FALLBACK = "/System/Library/Fonts/ヒラギノ角ゴシック W9.ttc"
 
+# macOS ヒラギノ明朝 (システムフォント)
+# TTC内のindex: 0 = W3(細め), 1 = W6(太め)
+HIRAGINO_MINCHO_PATH = "/System/Library/Fonts/ヒラギノ明朝 ProN.ttc"
+HIRAGINO_MINCHO_INDEX = {"Regular": 0, "Bold": 1, "Black": 1}
+
 # Noto Sans JP ダウンロード先（ヒラギノがない環境用）
 NOTO_FONT_PATHS = {
     weight: FONT_DIR / f"NotoSansJP-{weight}.ttf"
@@ -191,7 +196,7 @@ def register_fonts_for_reportlab():
 
 
 def get_pillow_font(weight: str = "Regular", size: int = 20):
-    """Pillow ImageFont を返す"""
+    """Pillow ImageFont を返す（ゴシック体）"""
     from PIL import ImageFont
     path = get_font_path(weight)
     if path and _is_valid_font(path):
@@ -204,3 +209,18 @@ def get_pillow_font(weight: str = "Regular", size: int = 20):
         return ImageFont.load_default(size=size)
     except Exception:
         return ImageFont.load_default()
+
+
+def get_pillow_font_mincho(weight: str = "Regular", size: int = 20):
+    """Pillow ImageFont を返す（明朝体）。
+    macOS ヒラギノ明朝 ProN を使用。利用不可の場合はゴシックにフォールバック。
+    """
+    from PIL import ImageFont
+    if Path(HIRAGINO_MINCHO_PATH).exists():
+        try:
+            idx = HIRAGINO_MINCHO_INDEX.get(weight, 0)
+            return ImageFont.truetype(HIRAGINO_MINCHO_PATH, size, index=idx)
+        except Exception:
+            pass
+    # フォールバック: ゴシック体
+    return get_pillow_font(weight, size)

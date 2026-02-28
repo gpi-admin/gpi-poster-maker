@@ -8,7 +8,7 @@ from poster.text_utils import (
     fit_font_in_ellipse, fit_font_in_box,
     wrap_text_jp, draw_text_multiline, draw_centered_text, get_text_size
 )
-from utils.font_manager import get_pillow_font
+from utils.font_manager import get_pillow_font, get_pillow_font_mincho
 from themes.color_themes import DARK_BROWN, WHITE, LIGHT_CREAM_BG
 
 # ─── 共通ユーティリティ ────────────────────────────────────────────────────
@@ -328,33 +328,75 @@ def draw_qr(canvas: Image.Image, qr_img: Image.Image,
 
 # ─── 縦書きタイトル帯 ──────────────────────────────────────────────────────
 
+# 縦書き時に90°回転が必要な文字（長音符など）
+_VERTICAL_ROTATE_CHARS = frozenset("ーｰ")
+
+
+def _paste_rotated_char(canvas: Image.Image, char: str, font,
+                         x: int, y: int, strip_w: int, ch_ref: int):
+    """文字を90°時計回りに回転してキャンバスに貼り付ける（ー用）。
+    anchor="mm" で正方形中心に文字を正確に中央配置してから回転する。
+    """
+    sq = max(strip_w, ch_ref) + 8
+    tmp = Image.new("RGBA", (sq, sq), (0, 0, 0, 0))
+    tmp_d = ImageDraw.Draw(tmp)
+    # anchor="mm" = 水平・垂直ともに中央寄せ → フォントメトリクスに依存せず正確
+    # stroke_width=2 で他の文字と同様に太く見せる
+    tmp_d.text((sq // 2, sq // 2), char, fill=(*DARK_BROWN, 255),
+               font=font, anchor="mm", stroke_width=2, stroke_fill=(*DARK_BROWN, 255))
+    # 90°時計回りに回転（正方形なのでサイズ不変）
+    tmp_rot = tmp.rotate(-90, expand=False)
+    # strip と文字セル内で中央配置
+    px = x + (strip_w - sq) // 2
+    py = y + (ch_ref - sq) // 2
+    base = canvas.convert("RGBA")
+    base.paste(tmp_rot, (px, py), tmp_rot)
+    canvas.paste(base.convert("RGB"))
+
+
 def draw_vertical_title(canvas: Image.Image,
                           main_title: str,
                           x: int, y_top: int, y_bot: int,
                           strip_w: int, fs_main: int):
     """
-    縦書きメインタイトル帯を描画する。
-    横書き文字列として一時キャンバスに描画し、-90° 回転（上から下へ読む縦書き）。
+    縦書きメインタイトルを文字積み方式で描画する。
+    各文字を縦に積み上げ、帯内で横中央・縦中央寄せ。
+    「ー」などの長音符は90°時計回りに回転して縦書き表記に合わせる。
     """
+    draw = ImageDraw.Draw(canvas)
+    num_chars = len(main_title)
     avail_h = y_bot - y_top
 
-    tmp_main = Image.new("RGBA", (avail_h, strip_w), (0, 0, 0, 0))
-    d_main = ImageDraw.Draw(tmp_main)
-    font_main = get_pillow_font("Black", fs_main)
-    tw, th = get_text_size(d_main, main_title, font_main)
-    if tw > avail_h - 4:
-        font_main = get_pillow_font("Black", max(12, int(fs_main * (avail_h - 4) / tw)))
-        tw, th = get_text_size(d_main, main_title, font_main)
-    ty = max(2, (strip_w - th) // 2)
-    tx = max(0, (avail_h - tw) // 2)
-    d_main.text((tx, ty), main_title, fill=DARK_BROWN + (255,), font=font_main)
-    rot_main = tmp_main.rotate(-90, expand=True)
+    # フォントサイズ: 帯幅の 65% を上限とし、縦に収まるよう自動調整
+    # 明朝体（ヒラギノ明朝）を使用
+    font_size = min(fs_main, max(10, int(strip_w * 0.65)))
+    font = get_pillow_font_mincho("Bold", font_size)
+    _, ch = get_text_size(draw, "あ", font)
+    char_step = ch + 2
+    total_h = char_step * num_chars
 
-    base = canvas.convert("RGBA")
-    tmp = Image.new("RGBA", base.size, (0, 0, 0, 0))
-    tmp.paste(rot_main, (x, y_top), rot_main)
-    result = Image.alpha_composite(base, tmp)
-    canvas.paste(result.convert("RGB"))
+    if total_h > avail_h:
+        font_size = max(8, int(font_size * avail_h / total_h))
+        font = get_pillow_font_mincho("Bold", font_size)
+        _, ch = get_text_size(draw, "あ", font)
+        char_step = ch + 2
+        total_h = char_step * num_chars
+
+    # 縦方向中央寄せ
+    cur_y = y_top + max(0, (avail_h - total_h) // 2)
+
+    for char in main_title:
+        if char in _VERTICAL_ROTATE_CHARS:
+            # 「ー」は90°時計回りに回転して縦棒として描画
+            _paste_rotated_char(canvas, char, font, x, cur_y, strip_w, ch)
+            draw = ImageDraw.Draw(canvas)   # canvas更新後にdrawを再取得
+        else:
+            cw, _ = get_text_size(draw, char, font)
+            cx = x + (strip_w - cw) // 2
+            # stroke_width=2 で明朝体を太く見せる
+            draw.text((cx, cur_y), char, fill=DARK_BROWN, font=font,
+                      stroke_width=2, stroke_fill=DARK_BROWN)
+        cur_y += char_step
 
 
 # ─── 右ストリップ: 年度テキスト ────────────────────────────────────────────
@@ -370,7 +412,7 @@ def draw_year_label_strip(draw: ImageDraw.ImageDraw,
     num_chars = max(1, len(year_text))
     avail_h = y_bot - y_top
     font_size = max(8, (avail_h // num_chars) - 4)
-    font = get_pillow_font("Bold", font_size)
+    font = get_pillow_font_mincho("Bold", font_size)
     _, ch = get_text_size(draw, "あ", font)
     char_step = ch + 2
     total_h = char_step * num_chars
@@ -379,7 +421,8 @@ def draw_year_label_strip(draw: ImageDraw.ImageDraw,
     for char in year_text:
         cw, _ = get_text_size(draw, char, font)
         cx = x + (strip_w - cw) // 2
-        draw.text((cx, start_y), char, fill=DARK_BROWN, font=font)
+        draw.text((cx, start_y), char, fill=DARK_BROWN, font=font,
+                  stroke_width=2, stroke_fill=DARK_BROWN)
         start_y += char_step
 
 
@@ -416,7 +459,8 @@ def draw_section_label_box(canvas: Image.Image,
         idx = label.index("部")
         display = label[:idx + 1]
 
-    fs = max(8, int(bw * 0.44))
+    # bw が小さくてもボックス内で読める最低限のサイズを確保
+    fs = max(13, int(bw * 0.75))
     font = get_pillow_font("Bold", fs)
     _, ch = get_text_size(draw, "あ", font)
     char_step = ch + 2

@@ -2,10 +2,10 @@
 Pillow ベースのポスタープレビュー描画エンジン
 
 レイアウト構成（左→右）:
-  左カラム (0〜37%)  : 場所・日時・司会・対象・QR
-  縦バー  (37〜39%)  : テーマカラー + 第N部ラベル
-  プログラム (39〜74%): 参加費無料 + 各セクション
-  タイトル帯 (74〜100%): 縦書き「第N回岐阜県小児科研修セミナー」
+  左カラム   (0〜37%)  : 場所・日時・司会・対象・QR
+  タイトル帯 (37〜50%) : 縦書き「第N回岐阜県小児科研修セミナー」（中央より少し左）
+  右ストリップ(50〜62%): 「20XX年度」縦書き + 第N部ラベルボックス（動的高さ）
+  プログラム (62〜100%): 参加費無料 + 各セクション内容
 """
 
 from PIL import Image, ImageDraw
@@ -16,7 +16,7 @@ from poster.layout import (
     LayoutEngine,
     PREVIEW_W, PREVIEW_H,
     HEADER_H, FOOTER_H,
-    LEFT_W, DIV_X, DIV_W, PROG_X, PROG_W, TITLE_X, TITLE_W, SECT_X, SECT_W,
+    LEFT_W, PROG_X, PROG_W, TITLE_X, TITLE_W, SECT_X, SECT_W,
     LC_PAD_L, LC_PAD_R,
     PROG_PAD_L, PROG_PAD_R,
     PROG_TOP,
@@ -31,7 +31,6 @@ from poster.layout import (
 )
 from poster.elements_pillow import (
     draw_header_bar, draw_footer_bar,
-    draw_center_divider,
     draw_basho_badge, draw_venue_info, draw_address,
     draw_zoom_section, draw_date_time_left,
     draw_mc_section, draw_audience_section,
@@ -97,16 +96,11 @@ def render_poster(data: PosterData, scale: float = 1.0) -> Image.Image:
     draw_header_bar(canvas, draw, header_h, theme)
     draw_footer_bar(canvas, draw, footer_y, footer_h, data.contact_email)
 
-    # ─── 中央縦バー ──────────────────────────────────────────────────────
-    div_x = pw(DIV_X)
-    div_w = max(4, pw(DIV_W))
-    draw_center_divider(draw, div_x, header_h, footer_y, div_w, theme)
-
     # ─── 縦書きタイトル帯 ────────────────────────────────────────────────
     title_x  = pw(TITLE_X)
     title_w  = pw(TITLE_W)
     sect_x   = pw(SECT_X)
-    sect_w   = W - sect_x
+    sect_w   = pw(SECT_W)
 
     draw_vertical_title(
         canvas,
