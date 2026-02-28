@@ -114,12 +114,11 @@ def render_poster(data: PosterData, scale: float = 1.0) -> Image.Image:
 
     # ─── 右ストリップ: 年度テキスト（固定位置） ──────────────────────────
     prog_top_y = ph(PROG_TOP)
-    # 縦書きタイトルと同じ v_pad で上端を揃える
     _v_pad = max(12, (footer_y - header_bottom) // 65)
     draw_year_label_strip(
         draw,
         f"{data.year}年度",
-        sect_x, header_bottom + _v_pad, prog_top_y,   # 下端はパディングなし
+        sect_x, header_bottom + _v_pad, prog_top_y - ph(0.014),
         sect_w
     )
 
