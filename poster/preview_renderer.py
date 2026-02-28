@@ -28,6 +28,7 @@ from poster.layout import (
     FS_PROG_TIME, FS_PROG_BADGE, FS_PROG_TITLE,
     FS_PRESENTER, FS_PRES_NAME, FS_SANSHUUHI,
     FS_V_TITLE,
+    SECTION_CONTENT_SCALES,
 )
 from poster.elements_pillow import (
     draw_header_bar, draw_footer_bar,
@@ -162,12 +163,17 @@ def render_poster(data: PosterData, scale: float = 1.0) -> Image.Image:
     )
     cur_y += date_h + ph(0.018)
 
+    # 第1部・第2部と同じコンテンツスケールを司会・座長にも適用
+    _mc_cs = SECTION_CONTENT_SCALES[0]
+    _fs_mc_aff  = ph(FS_PRESENTER * _mc_cs)
+    _fs_mc_name = ph(FS_PRES_NAME * _mc_cs)
+
     # 総合司会
     if data.mc:
         mc_h = draw_mc_section(
             draw, lc_x, cur_y, lc_w,
             "総合司会", data.mc, theme,
-            ph(FS_MC_BADGE), ph(FS_MC_AFF), ph(FS_MC_NAME)
+            ph(FS_MC_BADGE), _fs_mc_aff, _fs_mc_name
         )
         cur_y += mc_h + ph(0.012)
 
@@ -176,7 +182,7 @@ def render_poster(data: PosterData, scale: float = 1.0) -> Image.Image:
         chair_h = draw_mc_section(
             draw, lc_x, cur_y, lc_w,
             data.chair_label, data.chair, theme,
-            ph(FS_MC_BADGE), ph(FS_MC_AFF), ph(FS_MC_NAME)
+            ph(FS_MC_BADGE), _fs_mc_aff, _fs_mc_name
         )
         cur_y += chair_h + ph(0.012)
 

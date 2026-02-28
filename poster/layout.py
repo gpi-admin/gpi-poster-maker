@@ -211,6 +211,48 @@ class LayoutEngine:
         return blocks
 
 
+# ─── pdf_renderer.py 後方互換エイリアス ──────────────────────────────────
+
+LEFT_COL_X    = 0.0
+LEFT_COL_W    = LEFT_W
+DIVIDER_X     = TITLE_X
+DIVIDER_W     = TITLE_W
+RIGHT_COL_X   = PROG_X
+
+LC_MARGIN_X   = LC_PAD_L
+LC_W          = LEFT_W - LC_PAD_L - LC_PAD_R
+
+RC_MARGIN_X   = PROG_PAD_L
+RC_W          = PROG_W - PROG_PAD_L - PROG_PAD_R
+
+MARGIN_TOP    = HEADER_TOP + HEADER_H
+MARGIN_BOTTOM = FOOTER_H
+
+TITLE_STRIP_X = TITLE_X
+TITLE_STRIP_W = TITLE_W
+
+DATE_AREA_Y   = HEADER_TOP + HEADER_H + 0.020
+DATE_AREA_H   = 0.150
+
+PROGRAM_TOP   = PROG_TOP
+PROGRAM_BOT   = PROG_BOT
+
+BASHO_BADGE_R = BASHO_BH / 2.0   # 正規化半径
+
+BADGE_LG_W    = BASHO_BW
+BADGE_LG_H    = BASHO_BH
+BADGE_SM_W    = 0.250
+
+FS_DATE       = FS_DATE_BIG
+FS_TIME       = FS_TIME_LC
+FS_TITLE      = FS_V_TITLE
+FS_BADGE_LG   = FS_MC_BADGE
+FS_BADGE_SM   = FS_PROG_BADGE
+FS_SECTION_H  = FS_PROG_TITLE
+FS_VENUE      = FS_VENUE_BIG
+FS_AUDIENCE   = FS_AUD
+FS_MC         = FS_MC_NAME
+
 # ─── ヘルパー変換 ────────────────────────────────────────────────────────
 
 def n_to_px(value: float, axis: str = "h") -> int:
