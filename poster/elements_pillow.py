@@ -47,16 +47,16 @@ def _draw_text_spaced(draw: ImageDraw.ImageDraw, x: int, y: int,
 
 
 def draw_header_bar(canvas: Image.Image, draw: ImageDraw.ImageDraw,
-                    h: int, theme: dict):
+                    h: int, theme: dict, y_top: int = 0):
     """上部 "Gifu Pediatric-residency Intensives" バー（テーマカラー背景）"""
     W = canvas.width
     bar_color = theme.get("title_bar", DARK_BROWN)
-    draw.rectangle([0, 0, W, h], fill=bar_color)
+    draw.rectangle([0, y_top, W, y_top + h], fill=bar_color)
     font = get_pillow_font("Regular", max(10, int(h * 0.52)))
     text = "Gifu Pediatric-residency Intensives"
     pad = max(10, int(W * 0.03))
     _, th = get_text_size(draw, text, font)
-    _draw_text_spaced(draw, pad, (h - th) // 2, text, font, WHITE, W - pad * 2)
+    _draw_text_spaced(draw, pad, y_top + (h - th) // 2, text, font, WHITE, W - pad * 2)
 
 
 # ─── フッターバー ──────────────────────────────────────────────────────────
@@ -443,10 +443,11 @@ def draw_vertical_title(canvas: Image.Image,
     num_chars = len(main_title)
     avail_h = y_bot - y_top
 
-    # 上下に少しだけ余白を設ける（avail_h の約 1.5%、最低 12px）
-    v_pad = max(12, avail_h // 65)
-    y_top  = y_top + v_pad
-    avail_h = avail_h - 2 * v_pad
+    # 上下余白（上は小さめ、下は通常）
+    v_pad_top = max(4, avail_h // 120)
+    v_pad_bot = max(12, avail_h // 65)
+    y_top  = y_top + v_pad_top
+    avail_h = avail_h - v_pad_top - v_pad_bot
 
     # フォントサイズ: 帯幅の 88% を上限（従来65%から拡大）
     # 明朝体（ヒラギノ明朝）を使用
@@ -522,7 +523,7 @@ def draw_year_label_strip(draw: ImageDraw.ImageDraw,
 def draw_section_label_box(canvas: Image.Image,
                              x: int, y_start: int, y_end: int,
                              strip_w: int, label: str, theme: dict,
-                             pad: int = 5):
+                             pad: int = 9):
     """
     角丸長方形の第N部ラベルボックスを右ストリップに描画。
     ラベル文字を縦積みで中央配置する。
@@ -551,7 +552,7 @@ def draw_section_label_box(canvas: Image.Image,
         display = label[:idx + 1]
 
     # bw が小さくてもボックス内で読める最低限のサイズを確保
-    fs = max(13, int(bw * 0.75))
+    fs = max(11, int(bw * 0.62))
     font = get_pillow_font("Bold", fs)
     _, ch = get_text_size(draw, "あ", font)
     char_step = ch + 2

@@ -15,7 +15,7 @@ from poster.models import PosterData
 from poster.layout import (
     LayoutEngine,
     PREVIEW_W, PREVIEW_H,
-    HEADER_H, FOOTER_H,
+    HEADER_TOP, HEADER_H, FOOTER_H,
     LEFT_W, PROG_X, PROG_W, TITLE_X, TITLE_W, SECT_X, SECT_W,
     LC_PAD_L, LC_PAD_R,
     PROG_PAD_L, PROG_PAD_R,
@@ -89,11 +89,13 @@ def render_poster(data: PosterData, scale: float = 1.0) -> Image.Image:
     draw = ImageDraw.Draw(canvas)
 
     # ─── ヘッダー・フッター ──────────────────────────────────────────────
+    header_top = ph(HEADER_TOP)   # 帯の上余白（背景が見える）
     header_h = ph(HEADER_H)
+    header_bottom = header_top + header_h   # コンテンツ開始基準
     footer_h = ph(FOOTER_H)
     footer_y = H - footer_h
 
-    draw_header_bar(canvas, draw, header_h, theme)
+    draw_header_bar(canvas, draw, header_h, theme, y_top=header_top)
     draw_footer_bar(canvas, draw, footer_y, footer_h, data.contact_email, theme)
 
     # ─── 縦書きタイトル帯 ────────────────────────────────────────────────
@@ -105,25 +107,25 @@ def render_poster(data: PosterData, scale: float = 1.0) -> Image.Image:
     draw_vertical_title(
         canvas,
         f"第{data.session_num}回岐阜県小児科研修セミナー",
-        title_x, header_h, footer_y, title_w,
+        title_x, header_bottom, footer_y, title_w,
         ph(FS_V_TITLE)
     )
 
     # ─── 右ストリップ: 年度テキスト（固定位置） ──────────────────────────
     prog_top_y = ph(PROG_TOP)
     # 縦書きタイトルと同じ v_pad で上端を揃える
-    _v_pad = max(12, (footer_y - header_h) // 65)
+    _v_pad = max(12, (footer_y - header_bottom) // 65)
     draw_year_label_strip(
         draw,
         f"{data.year}年度",
-        sect_x, header_h + _v_pad, prog_top_y,   # 下端はパディングなし
+        sect_x, header_bottom + _v_pad, prog_top_y,   # 下端はパディングなし
         sect_w
     )
 
     # ─── 左カラム ────────────────────────────────────────────────────────
     lc_x  = pw(LC_PAD_L)
     lc_w  = pw(LEFT_W) - pw(LC_PAD_L) - pw(LC_PAD_R)
-    cur_y = header_h + ph(0.026)
+    cur_y = header_bottom + ph(0.026)
 
     # 場所バッジ + 会場名（横並び）
     badge_w = pw(BASHO_BW)
@@ -219,8 +221,8 @@ def render_poster(data: PosterData, scale: float = 1.0) -> Image.Image:
     # 参加費無料（上部右寄せ、赤）
     font_free = get_pillow_font("Black", ph(FS_SANSHUUHI))
     free_tw, free_th = get_text_size(draw, "参加費無料", font_free)
-    free_x = prog_x + prog_w - free_tw
-    free_y = header_h + ph(0.008)
+    free_x = prog_x + prog_w - free_tw - pw(0.012)
+    free_y = header_bottom + ph(0.018)
     draw.text((free_x, free_y), "参加費無料", fill=(220, 30, 30), font=font_free)
 
     # 動的レイアウト
