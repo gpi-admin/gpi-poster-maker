@@ -180,7 +180,7 @@ def draw_zoom_section(draw: ImageDraw.ImageDraw,
     「ハイブリッド配信あり」を下線付きで描画。
     返値: 使用した高さ（px）
     """
-    text = "ハイブリッドで実施！"
+    text = "ハイブリッド開催"
     font_size = max(10, int(fs * 1.8))
     font = get_pillow_font("Bold", font_size)
     indent = max(5, int(font_size * 0.6))
@@ -428,7 +428,10 @@ def _paste_rotated_char(canvas: Image.Image, char: str, font,
     py = y + (ch_ref - sq) // 2
     base = canvas.convert("RGBA")
     base.paste(tmp_rot, (px, py), tmp_rot)
-    canvas.paste(base.convert("RGB"))
+    if canvas.mode == "RGBA":
+        canvas.paste(base)
+    else:
+        canvas.paste(base.convert("RGB"))
 
 
 def draw_vertical_title(canvas: Image.Image,
@@ -659,6 +662,9 @@ def paste_illustration(canvas: Image.Image, img_path: str,
         tmp = Image.new("RGBA", base.size, (0, 0, 0, 0))
         tmp.paste(illust, (x, y), illust)
         result = Image.alpha_composite(base, tmp)
-        canvas.paste(result.convert("RGB"))
+        if canvas.mode == "RGBA":
+            canvas.paste(result)
+        else:
+            canvas.paste(result.convert("RGB"))
     except Exception as e:
         print(f"イラスト読み込みエラー: {img_path} - {e}")

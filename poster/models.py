@@ -66,7 +66,7 @@ class PosterData:
 
     # ビジュアル設定
     bg_opacity: float = 0.35
-    background_image_path: Optional[str] = None  # None = テーマデフォルト
+    background_image_path: Optional[str] = None  # None = 背景なし
     decorative_images: List[str] = field(default_factory=list)  # ファイルパスのリスト
 
     # カスタムカラー（theme_key="custom"時）

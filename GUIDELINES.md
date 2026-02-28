@@ -13,7 +13,7 @@
 | 出力形式 | 解像度 / 品質 | ライブラリ |
 |---------|-------------|-----------|
 | プレビュー (PNG) | 794×1123 px (96 DPI) | Pillow |
-| 本番 PDF | A4 ベクター | ReportLab |
+| 本番 PDF | A4 / 300 DPI 相当ラスター埋め込み（透過対応） | ReportLab + Pillow |
 | 高解像度 PNG | 2480×3508 px (300 DPI) | Pillow |
 
 ---
@@ -90,13 +90,14 @@
 
 ---
 
-### カテゴリ 6 — 背景イラスト（季節・半透明）
+### カテゴリ 6 — 背景イラスト（任意）
 
-- 開催時期に合う風景・自然イラストを **最背面に半透明（opacity≈0.30〜0.40）** で配置
-- テキストを邪魔しない「おしゃれで控えめな」背景が選定基準
-- テーマ選択で `bg_image` が自動決定される（`assets/illustrations/backgrounds/`）
-- ユーザーが独自背景を指定可能（`background_image_path` で上書き）
+- デフォルトは背景なし（ベースのクリーム色）
+- 背景イラストはユーザーが明示的に選択・アップロードした場合のみ描画される
+- プリセット背景は `assets/illustrations/backgrounds/` から選択可能
+- ユーザーが独自背景を指定可能（`background_image_path`）
 - `bg_opacity` で透明度を調整（デフォルト 0.35）
+- **PNG/PDF 書き出し時**は `transparent_bg=True` でレンダリングし、背景未指定領域を透過で出力する
 
 ---
 
@@ -112,7 +113,7 @@ GPI_Poster_Maker/
 │   ├── models.py             # PosterData / Section / ContentItem
 │   ├── layout.py             # 正規化座標定数 + LayoutEngine
 │   ├── preview_renderer.py   # Pillow プレビュー描画（96 DPI）
-│   ├── pdf_renderer.py       # ReportLab ベクター PDF 出力
+│   ├── pdf_renderer.py       # PDF 出力（Pillow画像をA4へ埋め込み）
 │   ├── elements_pillow.py    # Pillow 用描画関数（要素単位）
 │   ├── elements_pdf.py       # ReportLab 用描画関数（要素単位）
 │   ├── text_utils.py         # 日本語テキスト処理（折り返し・フィット）
@@ -190,8 +191,8 @@ ReportLab: n * PDF_H     (841.89 pt) または  n * PDF_W     (595.27 pt)
 
 ## 6. 描画レイヤー順（preview_renderer.py）
 
-1. ベースキャンバス（クリームホワイト背景）
-2. 背景イラスト（alpha blend, デフォルト opacity=0.35）
+1. ベースキャンバス（プレビュー: クリームホワイト / 書き出し透過モード: 透明）
+2. 背景イラスト（指定時のみ alpha blend）
 3. ヘッダーバー・フッターバー
 4. **縦書きメインタイトル帯**（TITLE_X〜TITLE_X+TITLE_W、37〜50%）— 文字積み方式
 5. **右ストリップ: 年度テキスト**（固定位置, SECT_X〜SECT_X+SECT_W の上部 PROG_TOP まで）
@@ -226,21 +227,12 @@ ReportLab: n * PDF_H     (841.89 pt) または  n * PDF_W     (595.27 pt)
 | `name` | 発表者氏名 |
 | `gap` | セクション間・コンテンツ間スペース |
 
-**タイトルブロック高さ推定:**
+**高さ計算は「実測」ベース:**
 
-`title` ブロックの高さは、実際のレンダラーと同じ int 丸めでピクセル幅・フォントサイズを計算して推定する。
-
-```python
-_prog_w_px = (PROG_W - PROG_PAD_L - PROG_PAD_R) * PREVIEW_W
-_base_px   = int(FS_PROG_TITLE * PREVIEW_H * scale)
-_font_px   = max(1, int(_base_px * cs))
-chars_per_line = max(6, int(_prog_w_px / _font_px))
-title_lines = max(1, math.ceil(len(item.title) / chars_per_line))
-block_h = FS_PROG_TITLE * scale * SECTION_TITLE_MULTIPLIERS[si] * title_lines * cs
-```
-
-`SECTION_TITLE_MULTIPLIERS = [1.40, 1.40, 1.40]` は実際の `draw_text_multiline` の `line_spacing=1.35` に対して
-余裕を持たせた値。この乗数を `line_spacing` より小さくするとタイトルと所属が重なるバグが発生する。
+- `LayoutEngine` は `render_scale` ごとの仮想キャンバス（`PREVIEW_W/H * render_scale`）を前提に高さを計算する。
+- `title` / `affiliation` は `wrap_text_jp` で実際の折り返し行を作成し、`draw_text_multiline` と同じ `line_spacing`（タイトル 1.35、所属 1.25）で高さを計測する。
+- `name` は `draw_presenter(..., affiliation=\"\", name=...)` と同じロジック（`先生` 接尾の扱い含む）で1行/複数行高さを計測する。
+- これにより、長いタイトルが複数行になっても所属行と重ならない。
 
 ---
 
@@ -305,12 +297,15 @@ block_h = FS_PROG_TITLE * scale * SECTION_TITLE_MULTIPLIERS[si] * title_lines * 
 ```python
 get_pillow_font(weight, size)  # weight: "Regular" | "Bold" | "Black"
 ensure_fonts()                  # 初回実行時にフォントをDLしてキャッシュ
+force_bold_fonts(enabled=True)  # コンテキスト中は Regular→Bold, Bold→Black に昇格
 ```
 
 フォントファイル: `assets/fonts/NotoSansJP/NotoSansJP-{weight}.otf`
 
 **macOS 環境ではシステムの Hiragino フォント (`.ttc`) を優先的に使用する場合がある。**
 テスト時は `ensure_fonts()` を必ず呼び出すこと。
+
+PDF 生成時は `force_bold_fonts(True)` を使い、全テキストを太字寄りに描画してから A4 PDF に埋め込む。
 
 ---
 

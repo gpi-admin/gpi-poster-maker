@@ -6,6 +6,8 @@ macOS 組み込みの ヒラギノ角ゴシック を優先して使用する。
 
 import subprocess
 import urllib.request
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 
 # プロジェクト内フォントディレクトリ（Noto DL先）
@@ -39,6 +41,27 @@ NOTO_URLS = {
 
 # ダウンロード試行フラグ
 _download_attempted = False
+_force_bold_ctx: ContextVar[bool] = ContextVar("force_bold_fonts", default=False)
+
+
+@contextmanager
+def force_bold_fonts(enabled: bool = True):
+    """コンテキスト内で get_pillow_font を太字寄りに強制する。"""
+    token = _force_bold_ctx.set(bool(enabled))
+    try:
+        yield
+    finally:
+        _force_bold_ctx.reset(token)
+
+
+def _resolve_weight(weight: str) -> str:
+    """必要に応じてウェイトを太字側に寄せる。"""
+    if _force_bold_ctx.get():
+        if weight == "Regular":
+            return "Bold"
+        if weight == "Bold":
+            return "Black"
+    return weight
 
 
 def _hiragino_path(weight: str) -> str | None:
@@ -63,6 +86,8 @@ def get_font_path(weight: str = "Regular") -> str:
     使用可能なフォントパスを返す。
     優先度: ヒラギノ(macOS) > ダウンロード済みNoto > デフォルト
     """
+    weight = _resolve_weight(weight)
+
     # 1. macOS ヒラギノ
     hira = _hiragino_path(weight)
     if hira and _is_valid_font(hira):
@@ -216,6 +241,7 @@ def get_pillow_font_mincho(weight: str = "Regular", size: int = 20):
     macOS ヒラギノ明朝 ProN を使用。利用不可の場合はゴシックにフォールバック。
     """
     from PIL import ImageFont
+    weight = _resolve_weight(weight)
     if Path(HIRAGINO_MINCHO_PATH).exists():
         try:
             idx = HIRAGINO_MINCHO_INDEX.get(weight, 0)

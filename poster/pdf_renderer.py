@@ -6,24 +6,28 @@ Pillow の高解像度レンダリング（300 DPI 相当）を A4 PDF に埋め
 """
 
 import io
-from pathlib import Path
+from PIL import Image
 from reportlab.pdfgen import canvas as rl_canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.utils import ImageReader
 
 from poster.models import PosterData
 from poster.preview_renderer import render_poster
-from poster.layout import PDF_W, PDF_H
+from poster.layout import PDF_W, PDF_H, HIRES_W, HIRES_H
+from utils.font_manager import force_bold_fonts
 
 
 def render_poster_pdf(data: PosterData) -> bytes:
     """
     ポスターを PDF バイト列として返す。
-    Pillow で 300 DPI 相当（scale=3.125）の高解像度画像を生成し、
-    A4 PDF に全面埋め込む。プレビューと完全に同じ見た目になる。
+    Pillow でプレビュー基準画像を生成し、300 DPI 相当に拡大して
+    A4 PDF に全面埋め込む。PDF 側は全テキストを太字寄りに描画する。
     """
-    # 300 DPI 相当: PREVIEW(96DPI) × 3.125 = 2481 × 3509 px
-    hires_img = render_poster(data, scale=3.125)
+    # PNG と改行結果を一致させるため、まずプレビュー基準で描画し
+    # 300DPI 相当に拡大して PDF に埋め込む。PDF では文字を太字寄りに強制する。
+    with force_bold_fonts(True):
+        base_img = render_poster(data, scale=1.0, transparent_bg=True)
+    hires_img = base_img.resize((HIRES_W, HIRES_H), Image.Resampling.LANCZOS)
 
     # PIL Image → BytesIO
     img_buf = io.BytesIO()
@@ -36,7 +40,7 @@ def render_poster_pdf(data: PosterData) -> bytes:
     c.setTitle(f"GPI {data.year}年度 第{data.session_num}回ポスター")
 
     # A4 全面に画像を配置（ReportLab 座標は左下原点）
-    c.drawImage(ImageReader(img_buf), 0, 0, width=PDF_W, height=PDF_H)
+    c.drawImage(ImageReader(img_buf), 0, 0, width=PDF_W, height=PDF_H, mask="auto")
 
     c.save()
     return pdf_buf.getvalue()

@@ -9,9 +9,13 @@ Pillow プレビュー: 794 x 1123 px
 ReportLab PDF:    595.27 x 841.89 pt
 """
 
-import math
 from dataclasses import dataclass, field
 from typing import List
+
+from PIL import Image, ImageDraw
+
+from poster.text_utils import get_text_size, wrap_text_jp
+from utils.font_manager import get_pillow_font
 
 # ─── キャンバスサイズ ─────────────────────────────────────────────────────
 
@@ -101,10 +105,6 @@ FS_V_YEAR      = 0.022   # 縦書き年度文字
 # 第1部・第2部: 0.90（やや小さく）, 第3部: 1.10（やや大きく）
 SECTION_CONTENT_SCALES = [0.90, 0.90, 1.10]
 
-# タイトルブロック高さ乗数
-# draw_content_title の実際の line_spacing=1.35 と合わせ、1.40 で若干余裕を持たせる
-SECTION_TITLE_MULTIPLIERS = [1.40, 1.40, 1.40]
-
 # ─── バッジサイズ (normalized) ───────────────────────────────────────────
 
 BASHO_BW    = 0.080   # 場所バッジ幅 (canvas width 比)
@@ -132,8 +132,13 @@ class LayoutEngine:
     MC/座長は含まない（左カラムで描画）。
     """
 
-    def __init__(self, poster_data):
+    def __init__(self, poster_data, render_scale: float = 1.0):
         self.data = poster_data
+        self.render_scale = render_scale
+        self.canvas_w = max(1, int(PREVIEW_W * render_scale))
+        self.canvas_h = max(1, int(PREVIEW_H * render_scale))
+        self.prog_w_px = max(1, int((PROG_W - PROG_PAD_L - PROG_PAD_R) * self.canvas_w))
+        self._measure_draw = ImageDraw.Draw(Image.new("RGB", (1, 1), "white"))
 
     def compute(self) -> List[Block]:
         for scale in [1.0, 0.95, 0.90, 0.85, 0.80, 0.75, 0.70]:
@@ -151,7 +156,6 @@ class LayoutEngine:
 
             # セクション別コンテンツスケール（タイトル・所属・氏名のみ適用）
             cs = SECTION_CONTENT_SCALES[si] if si < len(SECTION_CONTENT_SCALES) else 1.0
-            tm = SECTION_TITLE_MULTIPLIERS[si] if si < len(SECTION_TITLE_MULTIPLIERS) else 1.2
 
             # 時刻ヘッダー
             if sec.time_start and sec.time_end:
@@ -172,40 +176,93 @@ class LayoutEngine:
                     "scale": scale,
                 }))
 
-                # タイトル行数推定
-                # 実際の描画幅とフォントサイズ（レンダラーと同じ int 丸め）から算出
-                _prog_w_px = (PROG_W - PROG_PAD_L - PROG_PAD_R) * PREVIEW_W
-                _base_px   = int(FS_PROG_TITLE * PREVIEW_H * scale)
-                _font_px   = max(1, int(_base_px * cs))
-                chars_per_line = max(6, int(_prog_w_px / _font_px))
-                title_lines = max(1, math.ceil(len(item.title) / chars_per_line))
-                blocks.append(Block("title", 0, FS_PROG_TITLE * scale * tm * title_lines * cs, {
+                # タイトル（実測行高）
+                title_lines, title_h = self._measure_wrapped_block(
+                    text=item.title,
+                    weight="Bold",
+                    fs_norm=FS_PROG_TITLE,
+                    scale=scale,
+                    content_scale=cs,
+                    line_spacing=1.35,
+                )
+                blocks.append(Block("title", 0, title_h, {
                     "text": item.title,
                     "scale": scale,
                     "content_scale": cs,
                     "lines": title_lines,
                 }))
 
-                # 所属（手動改行を考慮）
-                aff_text = item.affiliation
-                manual_lines = aff_text.count("\n") + 1
-                aff_chars_per_line = max(10, int(20 / cs))
-                auto_lines = max(1, len(aff_text.replace("\n", "")) // aff_chars_per_line + 1)
-                aff_lines = max(manual_lines, auto_lines)
-                blocks.append(Block("affiliation", 0, FS_PRESENTER * scale * 1.35 * aff_lines * cs, {
+                # 所属（実測行高）
+                aff_lines, aff_h = self._measure_wrapped_block(
+                    text=item.affiliation,
+                    weight="Regular",
+                    fs_norm=FS_PRESENTER,
+                    scale=scale,
+                    content_scale=cs,
+                    line_spacing=1.25,
+                )
+                blocks.append(Block("affiliation", 0, aff_h, {
                     "text": item.affiliation,
                     "scale": scale,
                     "content_scale": cs,
+                    "lines": aff_lines,
                 }))
 
                 # 氏名
-                blocks.append(Block("name", 0, FS_PRES_NAME * scale * 1.5 * cs, {
+                name_h = self._measure_name_block(
+                    name=item.presenter_name,
+                    scale=scale,
+                    content_scale=cs,
+                )
+                blocks.append(Block("name", 0, name_h, {
                     "text": item.presenter_name,
                     "scale": scale,
                     "content_scale": cs,
                 }))
 
         return blocks
+
+    def _font_px(self, fs_norm: float, scale: float, content_scale: float = 1.0) -> int:
+        return max(1, int(fs_norm * self.canvas_h * scale * content_scale))
+
+    def _measure_multiline_height(self, font, lines: List[str], line_spacing: float) -> int:
+        if not lines:
+            return 0
+        _, ch = get_text_size(self._measure_draw, "あ", font)
+        line_h = max(1, int(ch * line_spacing))
+        return line_h * len(lines)
+
+    def _measure_wrapped_block(
+        self,
+        text: str,
+        weight: str,
+        fs_norm: float,
+        scale: float,
+        content_scale: float,
+        line_spacing: float,
+    ) -> tuple[list[str], float]:
+        font = get_pillow_font(weight, self._font_px(fs_norm, scale, content_scale))
+        lines = wrap_text_jp(self._measure_draw, text, font, self.prog_w_px)
+        h_px = self._measure_multiline_height(font, lines, line_spacing)
+        return lines, (h_px / self.canvas_h)
+
+    def _measure_name_block(self, name: str, scale: float, content_scale: float) -> float:
+        if not name:
+            return 0.0
+
+        fs_name = self._font_px(FS_PRES_NAME, scale, content_scale)
+        font_n = get_pillow_font("Bold", fs_name)
+
+        if not name.endswith("先生"):
+            fs_sensei = max(8, int(fs_name * 0.85))
+            font_sensei = get_pillow_font("Regular", fs_sensei)
+            _, nm_h = get_text_size(self._measure_draw, name, font_n)
+            _, ss_h = get_text_size(self._measure_draw, " 先生", font_sensei)
+            return int(max(nm_h, ss_h) * 1.25) / self.canvas_h
+
+        lines = wrap_text_jp(self._measure_draw, name, font_n, self.prog_w_px)
+        h_px = self._measure_multiline_height(font_n, lines, 1.25)
+        return h_px / self.canvas_h
 
     def _assign_y(self, blocks: List[Block]) -> List[Block]:
         """Y座標を順番に割り当てる"""

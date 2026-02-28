@@ -242,8 +242,10 @@ def _build_poster_data(uploaded_bg=None, uploaded_decos_files=None) -> PosterDat
         with open(tmp_path, "wb") as f:
             f.write(uploaded_bg.read())
         bg_path = str(tmp_path)
-    elif ss.get("selected_bg") and ss["selected_bg"] != "（テーマデフォルト）":
-        bg_path = str(BG_DIR / ss["selected_bg"])
+    elif ss.get("selected_bg") and ss["selected_bg"] != "（背景なし）":
+        candidate = BG_DIR / ss["selected_bg"]
+        if candidate.exists():
+            bg_path = str(candidate)
 
     # 装飾イラスト
     deco_paths = []
@@ -575,7 +577,7 @@ elif step == "7. イラスト & 出力":
     with col_left:
         st.subheader("背景イラスト")
 
-        # テーマデフォルト vs カスタム
+        # 背景なし / プリセット / カスタム
         preset_bgs = list_assets(BG_DIR)
         use_custom_bg = st.checkbox("カスタム背景画像をアップロードする")
         uploaded_bg = None
@@ -588,7 +590,7 @@ elif step == "7. イラスト & 出力":
             if preset_bgs:
                 st.session_state["selected_bg"] = st.selectbox(
                     "プリセット背景を選択",
-                    options=["（テーマデフォルト）"] + preset_bgs,
+                    options=["（背景なし）"] + preset_bgs,
                     index=0,
                 )
             else:
@@ -632,8 +634,13 @@ elif step == "7. イラスト & 出力":
             with st.spinner("ポスターを生成中..."):
                 try:
                     from poster.preview_renderer import render_poster
-                    img = render_poster(poster_data, scale=1.0)
+                    img = render_poster(poster_data, scale=1.0, transparent_bg=False)
+                    export_img = render_poster(poster_data, scale=1.0, transparent_bg=True)
+                    export_png_buf = io.BytesIO()
+                    export_img.save(export_png_buf, format="PNG")
+                    export_png_buf.seek(0)
                     st.session_state["preview_img"] = img
+                    st.session_state["export_png_bytes"] = export_png_buf.getvalue()
                     st.session_state["poster_data"] = poster_data
                     st.success("生成完了！")
                 except Exception as e:
@@ -647,14 +654,22 @@ elif step == "7. イラスト & 出力":
             dl_col1, dl_col2 = st.columns(2)
             with dl_col1:
                 # PNG ダウンロード
-                img_buf = io.BytesIO()
-                st.session_state["preview_img"].save(img_buf, format="PNG")
-                img_buf.seek(0)
+                png_bytes = st.session_state.get("export_png_bytes")
+                if (not png_bytes) and ("poster_data" in st.session_state):
+                    from poster.preview_renderer import render_poster
+                    _export_img = render_poster(
+                        st.session_state["poster_data"], scale=1.0, transparent_bg=True
+                    )
+                    _buf = io.BytesIO()
+                    _export_img.save(_buf, format="PNG")
+                    _buf.seek(0)
+                    png_bytes = _buf.getvalue()
+                    st.session_state["export_png_bytes"] = png_bytes
                 year = st.session_state["year"]
                 num = st.session_state["session_num"]
                 st.download_button(
                     label="📥 PNG をダウンロード",
-                    data=img_buf,
+                    data=png_bytes or b"",
                     file_name=f"GPI_{year}_{num:02d}.png",
                     mime="image/png",
                     use_container_width=True,

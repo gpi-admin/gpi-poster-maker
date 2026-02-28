@@ -38,23 +38,24 @@ from poster.elements_pillow import (
     draw_qr, draw_vertical_title,
     draw_year_label_strip, draw_section_label_box,
     draw_section_time, draw_sub_badge,
-    draw_content_title, draw_presenter,
+    draw_presenter,
     paste_illustration,
 )
 from poster.qr_generator import generate_qr
 from themes.color_themes import get_theme, LIGHT_CREAM_BG
 from utils.image_utils import make_background_layer
 from utils.font_manager import ensure_fonts, get_pillow_font
-from poster.text_utils import get_text_size
+from poster.text_utils import get_text_size, wrap_text_jp, draw_text_multiline
 
 ASSETS_DIR = Path(__file__).parent.parent / "assets"
 
 
-def render_poster(data: PosterData, scale: float = 1.0) -> Image.Image:
+def render_poster(data: PosterData, scale: float = 1.0, transparent_bg: bool = False) -> Image.Image:
     """
     ポスターを PIL Image としてレンダリングして返す。
     scale=1.0: PREVIEW_W × PREVIEW_H  (794 × 1123 px)
     scale=0.5: 半分サイズ（高速プレビュー用）
+    transparent_bg=True: ベース背景を透明で開始する（書き出し用）
     """
     ensure_fonts()
     theme = get_theme(data.theme_key,
@@ -68,16 +69,13 @@ def render_poster(data: PosterData, scale: float = 1.0) -> Image.Image:
     def ph(n):  return max(1, int(n * H))   # 正規化高さ → px
 
     # ─── ベースキャンバス ────────────────────────────────────────────────
-    canvas = Image.new("RGB", (W, H), color=LIGHT_CREAM_BG)
+    if transparent_bg:
+        canvas = Image.new("RGBA", (W, H), color=(0, 0, 0, 0))
+    else:
+        canvas = Image.new("RGB", (W, H), color=LIGHT_CREAM_BG)
 
-    # ─── 背景イラスト ────────────────────────────────────────────────────
+    # ─── 背景イラスト（明示指定時のみ）───────────────────────────────────
     bg_path = getattr(data, "background_image_path", None)
-    if bg_path is None:
-        bg_file = theme.get("bg_image")
-        if bg_file:
-            candidate = ASSETS_DIR / "illustrations" / "backgrounds" / bg_file
-            if candidate.exists():
-                bg_path = str(candidate)
 
     if bg_path and Path(bg_path).exists():
         try:
@@ -194,11 +192,14 @@ def render_poster(data: PosterData, scale: float = 1.0) -> Image.Image:
 
     # QR コード（左カラム下部）
     qr_caption1 = "事前登録はこちらから"
-    qr_caption2 = "※現地参加の方もこちらから登録してください"
+    qr_caption2 = "※現地参加の方も登録してください"
     font_cap = get_pillow_font("Regular", ph(FS_QR_CAP))
+    fs_cap_bold = max(ph(FS_QR_CAP) + 1, int(ph(FS_QR_CAP) * 1.12))
+    font_cap_bold = get_pillow_font("Bold", fs_cap_bold)
     _, cap_h = get_text_size(draw, "あ", font_cap)
+    _, cap2_h = get_text_size(draw, "あ", font_cap_bold)
     cap_line_gap = int(cap_h * 0.3)
-    total_cap_h = cap_h * 2 + cap_line_gap
+    total_cap_h = cap_h + cap2_h + cap_line_gap
 
     qr_bottom = footer_y - ph(0.020) - total_cap_h - ph(0.006)
     max_qr = qr_bottom - cur_y - ph(0.005)
@@ -214,7 +215,6 @@ def render_poster(data: PosterData, scale: float = 1.0) -> Image.Image:
         draw.text((lc_x + (lc_w - cap1_w) // 2, cap_y),
                    qr_caption1, fill=DARK_BROWN, font=font_cap)
         # キャプション2行目（太字）
-        font_cap_bold = get_pillow_font("Bold", ph(FS_QR_CAP))
         cap2_w, _ = get_text_size(draw, qr_caption2, font_cap_bold)
         draw.text((lc_x + (lc_w - cap2_w) // 2, cap_y + cap_h + cap_line_gap),
                    qr_caption2, fill=DARK_BROWN, font=font_cap_bold)
@@ -231,7 +231,7 @@ def render_poster(data: PosterData, scale: float = 1.0) -> Image.Image:
     draw.text((free_x, free_y), "参加費無料", fill=(220, 30, 30), font=font_free)
 
     # 動的レイアウト
-    layout = LayoutEngine(data).compute()
+    layout = LayoutEngine(data, render_scale=scale).compute()
 
     section_positions = []   # [(part_label, y_px)] for divider labels
 
@@ -256,14 +256,17 @@ def render_poster(data: PosterData, scale: float = 1.0) -> Image.Image:
                             block.data["label"], theme)
 
         elif block.kind == "title":
-            draw_content_title(draw, prog_x, by, prog_w,
-                                block.data["text"],
-                                int(ph(FS_PROG_TITLE) * sc * cs))
+            font_t = get_pillow_font("Bold", int(ph(FS_PROG_TITLE) * sc * cs))
+            lines = block.data.get("lines") or wrap_text_jp(
+                draw, block.data["text"], font_t, prog_w
+            )
+            draw_text_multiline(draw, lines, font_t, prog_x, by, DARK_BROWN, 1.35)
 
         elif block.kind == "affiliation":
             font_a = get_pillow_font("Regular", int(ph(FS_PRESENTER) * sc * cs))
-            from poster.text_utils import wrap_text_jp, draw_text_multiline
-            lines = wrap_text_jp(draw, block.data["text"], font_a, prog_w)
+            lines = block.data.get("lines") or wrap_text_jp(
+                draw, block.data["text"], font_a, prog_w
+            )
             draw_text_multiline(draw, lines, font_a, prog_x, by, DARK_BROWN, 1.25)
 
         elif block.kind == "name":
