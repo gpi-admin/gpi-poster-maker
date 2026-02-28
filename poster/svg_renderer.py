@@ -230,7 +230,8 @@ class SVGCanvas:
             f'x="{x:.3f}" y="{baseline_y:.3f}" '
             f'font-family="{_esc(svg_font)}" font-size="{size:.3f}" '
             f'font-weight="{font_weight}" '
-            f'fill="{_hex(color)}"'
+            f'fill="{_hex(color)}" '
+            f'xml:space="preserve"'
         )
         if transform:
             attrs += f' transform="{transform}"'
@@ -765,7 +766,7 @@ def render_poster_svg(data: PosterData) -> str:
 
     # QR コード
     cap_fs = ph(FS_QR_CAP)
-    cap2_fs = max(cap_fs + 1.0, cap_fs * 1.45)
+    cap2_fs = max(cap_fs + 1.0, cap_fs * 1.25)
     _, _, cap_h = _fm(_RL_GOTHIC, cap_fs)
     _, _, cap2_h = _fm(_RL_GOTHIC, cap2_fs)
     cap_gap = cap_h * 0.3
