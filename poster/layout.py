@@ -101,7 +101,7 @@ SECTION_CONTENT_SCALES = [0.90, 0.90, 1.10]
 
 # タイトルブロック高さ乗数（フォントが小さいほど行間余白が詰まるため補正）
 # cs=0.90 のとき 1.35、cs=1.10 のとき 1.20 で視覚的な余白を統一
-SECTION_TITLE_MULTIPLIERS = [1.20, 1.20, 1.20]
+SECTION_TITLE_MULTIPLIERS = [1.20, 1.20, 1.10]
 
 # ─── バッジサイズ (normalized) ───────────────────────────────────────────
 
@@ -170,8 +170,9 @@ class LayoutEngine:
                     "scale": scale,
                 }))
 
-                # タイトル行数推定（prog_w ≈ 341px, 27px/char → 約13文字/行）
-                title_lines = max(1, len(item.title) // 13 + 1)
+                # タイトル行数推定（cs が大きいほど1行の文字数が減る）
+                chars_per_line = max(8, int(13 / cs))
+                title_lines = max(1, len(item.title) // chars_per_line + 1)
                 blocks.append(Block("title", 0, FS_PROG_TITLE * scale * tm * title_lines * cs, {
                     "text": item.title,
                     "scale": scale,
@@ -179,8 +180,12 @@ class LayoutEngine:
                     "lines": title_lines,
                 }))
 
-                # 所属
-                aff_lines = max(1, len(item.affiliation) // 20 + 1)
+                # 所属（手動改行を考慮）
+                aff_text = item.affiliation
+                manual_lines = aff_text.count("\n") + 1
+                aff_chars_per_line = max(10, int(20 / cs))
+                auto_lines = max(1, len(aff_text.replace("\n", "")) // aff_chars_per_line + 1)
+                aff_lines = max(manual_lines, auto_lines)
                 blocks.append(Block("affiliation", 0, FS_PRESENTER * scale * 1.35 * aff_lines * cs, {
                     "text": item.affiliation,
                     "scale": scale,

@@ -479,8 +479,9 @@ elif step == "6. プログラム":
                     )
                 c3, c4 = st.columns(2)
                 with c3:
-                    item["affiliation"] = st.text_input(
-                        "所属", value=item["affiliation"], key=f"aff_{i}_{j}"
+                    item["affiliation"] = st.text_area(
+                        "所属", value=item["affiliation"], key=f"aff_{i}_{j}",
+                        height=70, help="改行したい場合はEnterを押してください"
                     )
                 with c4:
                     item["name"] = st.text_input(
