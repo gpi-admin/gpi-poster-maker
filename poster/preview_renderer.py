@@ -175,7 +175,7 @@ def render_poster(data: PosterData, scale: float = 1.0) -> Image.Image:
     if data.chair:
         chair_h = draw_mc_section(
             draw, lc_x, cur_y, lc_w,
-            "特別講演 座長", data.chair, theme,
+            data.chair_label, data.chair, theme,
             ph(FS_MC_BADGE), ph(FS_MC_AFF), ph(FS_MC_NAME)
         )
         cur_y += chair_h + ph(0.012)

@@ -50,7 +50,8 @@ class PosterData:
 
     # 司会・座長
     mc: Optional[PersonInfo] = None
-    chair: Optional[PersonInfo] = None   # 特別講演座長（任意）
+    chair: Optional[PersonInfo] = None        # 座長（任意）
+    chair_label: str = "特別講演 座長"          # バッジラベル（ユーザー編集可）
 
     # 対象
     audience: List[str] = field(default_factory=lambda: [

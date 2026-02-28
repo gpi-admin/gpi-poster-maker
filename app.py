@@ -98,6 +98,7 @@ def init_state():
         "mc_affiliation": "岐阜大学医学部附属病院 小児科",
         "mc_name": "",
         "has_chair": False,
+        "chair_label": "特別講演 座長",
         "chair_affiliation": "",
         "chair_name": "",
         "audience": ["学生", "初期研修医", "後期研修医", "小児科医"],
@@ -228,6 +229,7 @@ def _build_poster_data(uploaded_bg=None, uploaded_decos_files=None) -> PosterDat
         zoom_note=ss["zoom_note"],
         mc=mc,
         chair=chair,
+        chair_label=ss.get("chair_label", "特別講演 座長"),
         audience=ss["audience"],
         sections=sections,
         contact_email=ss["contact_email"],
@@ -359,11 +361,15 @@ elif step == "4. 司会・座長":
             )
 
     with col2:
-        st.subheader("特別講演 座長")
+        st.subheader("座長")
         st.session_state["has_chair"] = st.checkbox(
-            "特別講演座長あり", value=st.session_state["has_chair"]
+            "座長あり", value=st.session_state["has_chair"]
         )
         if st.session_state["has_chair"]:
+            st.session_state["chair_label"] = st.text_input(
+                "バッジラベル", value=st.session_state["chair_label"],
+                key="ch_lbl"
+            )
             st.session_state["chair_affiliation"] = st.text_input(
                 "所属", value=st.session_state["chair_affiliation"],
                 key="ch_aff"

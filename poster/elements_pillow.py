@@ -318,7 +318,7 @@ def draw_mc_section(draw: ImageDraw.ImageDraw,
     # バッジ（ピル型）
     badge_h = int(fs_badge * 2.0)
     # テキストに合わせた幅
-    font_b = fit_font_in_box(draw, badge_label, "Bold",
+    font_b = fit_font_in_box(draw, badge_label, "Regular",
                               int(w * 0.75), badge_h - 4,
                               max_size=fs_badge + 2, min_size=8)
     tw, _ = get_text_size(draw, badge_label, font_b)
@@ -365,7 +365,7 @@ def draw_audience_section(draw: ImageDraw.ImageDraw,
 
     # 「対象」バッジ
     badge_h = int(fs * 1.9)
-    font_lbl = fit_font_in_box(draw, "対象", "Bold",
+    font_lbl = fit_font_in_box(draw, "対象", "Regular",
                                 int(w * 0.45), badge_h - 4,
                                 max_size=fs + 2, min_size=8)
     tw, _ = get_text_size(draw, "対象", font_lbl)
@@ -538,7 +538,7 @@ def draw_section_label_box(canvas: Image.Image,
     by = y_start + pad
     bw = strip_w - pad * 2
 
-    color = theme["accent"]
+    color = theme.get("accent_light", theme["accent"])   # 薄い色
     r = max(4, bw // 4)
     try:
         draw.rounded_rectangle([bx, by, bx + bw, by + box_h], radius=r, fill=color)
@@ -563,7 +563,7 @@ def draw_section_label_box(canvas: Image.Image,
         cw, _ = get_text_size(draw, char, font)
         cx = bx + (bw - cw) // 2
         if start_ty + ch <= by + box_h:
-            draw.text((cx, start_ty), char, fill=WHITE, font=font)
+            draw.text((cx, start_ty), char, fill=DARK_BROWN, font=font)   # 黒文字
         start_ty += char_step
 
 
@@ -585,13 +585,13 @@ def draw_sub_badge(draw: ImageDraw.ImageDraw,
     ピル型の小バッジ（症例報告N など）を描画。
     返値: 消費高さ
     """
-    color = theme.get("accent_light", theme["accent"])
+    color = theme["accent"]   # 濃い色
     font = fit_font_in_box(draw, label, "Regular",
                             int(max_w * 0.92), int(h * 0.82),
                             max_size=int(h * 0.78), min_size=7)
     tw, _ = get_text_size(draw, label, font)
     badge_w = min(tw + int(h * 1.8), max_w)
-    _draw_pill(draw, x, y, badge_w, h, color, label, font, DARK_BROWN)
+    _draw_pill(draw, x, y, badge_w, h, color, label, font, WHITE)   # 白文字
     return h
 
 
