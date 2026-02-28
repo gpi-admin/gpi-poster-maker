@@ -17,7 +17,7 @@ from poster.preview_renderer import render_poster
 data = PosterData(
     year=2025,
     session_num=1,
-    theme_key="spring_pink",
+    theme_key="spring_sakura",
     event_date="2025年 5月23日(金)",
     time_range="19:00 - 20:30",
     venue_room="5F 小会議室1",

@@ -84,7 +84,7 @@ def init_state():
     defaults = {
         "year": date.today().year,
         "session_num": 1,
-        "theme_key": "spring_pink",
+        "theme_key": "spring_sakura",
         "custom_accent": "#D26E96",
         "event_date": "",
         "time_range": "19:00 - 20:30",
@@ -262,11 +262,17 @@ if step == "1. 基本情報・テーマ":
 
     with col2:
         theme_options = {k: v["name"] for k, v in THEMES.items()}
+        theme_keys = list(theme_options.keys())
+        current_key = st.session_state["theme_key"]
+        # 旧キー（エイリアス）は THEMES に存在しないのでフォールバック
+        if current_key not in theme_keys:
+            current_key = "spring_sakura"
+            st.session_state["theme_key"] = current_key
         st.session_state["theme_key"] = st.selectbox(
             "カラーテーマ",
-            options=list(theme_options.keys()),
+            options=theme_keys,
             format_func=lambda k: theme_options[k],
-            index=list(theme_options.keys()).index(st.session_state["theme_key"]),
+            index=theme_keys.index(current_key),
         )
         if st.session_state["theme_key"] != "custom":
             theme = THEMES[st.session_state["theme_key"]]
