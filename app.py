@@ -6,6 +6,7 @@ GPI Poster Maker - Streamlit Web アプリ
 
 import streamlit as st
 import io
+import json
 import sys
 from pathlib import Path
 from datetime import date
@@ -58,6 +59,49 @@ st.title("🏥 GPI Poster Maker")
 st.caption("岐阜県小児科研修セミナー ポスター自動生成システム")
 st.markdown("---")
 
+# ─── セーブ / ロード ヘルパー（サイドバーより前に定義が必要）────────────────
+
+_SAVE_KEYS = [
+    "year", "session_num", "theme_key", "custom_accent",
+    "event_date", "time_range",
+    "venue_room", "venue_building", "venue_address",
+    "registration_url", "zoom_note",
+    "has_mc", "mc_affiliation", "mc_name",
+    "has_chair", "chair_label", "chair_affiliation", "chair_name",
+    "audience", "extra_audience",
+    "num_sections", "sections",
+    "bg_opacity", "selected_bg", "selected_decos",
+    "contact_email",
+]
+
+
+def _export_state() -> bytes:
+    """セッションステートを JSON バイト列にシリアライズ"""
+    payload = {"_version": "1.1"}
+    for k in _SAVE_KEYS:
+        payload[k] = st.session_state.get(k)
+    return json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+
+
+def _import_state(data: bytes):
+    """JSON バイト列をセッションステートに反映（不明キーは無視）"""
+    try:
+        payload = json.loads(data.decode("utf-8"))
+    except Exception as e:
+        st.sidebar.error(f"読み込みエラー: {e}")
+        return
+    from themes.color_themes import THEMES, _THEME_ALIASES
+    for k in _SAVE_KEYS:
+        if k not in payload:
+            continue
+        val = payload[k]
+        if k == "theme_key":
+            val = _THEME_ALIASES.get(val, val)
+            if val not in THEMES:
+                val = "spring_sakura"
+        st.session_state[k] = val
+
+
 # ─── サイドバー：ステップナビゲーション ──────────────────────────────────
 
 with st.sidebar:
@@ -77,6 +121,33 @@ with st.sidebar:
     )
     st.markdown("---")
     st.caption("過去ポスターを参考に必要事項を入力してください。")
+
+    # ─── セーブ / ロード ───────────────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("##### 💾 データの保存 / 読み込み")
+
+    year_val = st.session_state.get("year", date.today().year)
+    num_val  = st.session_state.get("session_num", 1)
+    save_name = f"GPI_{year_val}_{num_val:02d}.json"
+    st.download_button(
+        label="📥 現在のデータを保存",
+        data=_export_state(),
+        file_name=save_name,
+        mime="application/json",
+        use_container_width=True,
+        help="入力内容を JSON ファイルとして保存します",
+    )
+
+    uploaded_json = st.file_uploader(
+        "保存済みデータを読み込む",
+        type=["json"],
+        key="load_json",
+        help="以前保存した JSON ファイルを選択するとフォームに反映されます",
+    )
+    if uploaded_json is not None:
+        _import_state(uploaded_json.read())
+        st.success("✅ 読み込み完了！ページを再操作してください。")
+        st.rerun()
 
 # ─── セッションステート 初期化 ────────────────────────────────────────────
 
