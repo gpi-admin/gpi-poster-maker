@@ -341,9 +341,9 @@ def _paste_rotated_char(canvas: Image.Image, char: str, font,
     tmp = Image.new("RGBA", (sq, sq), (0, 0, 0, 0))
     tmp_d = ImageDraw.Draw(tmp)
     # anchor="mm" = 水平・垂直ともに中央寄せ → フォントメトリクスに依存せず正確
-    # stroke_width=2 で他の文字と同様に太く見せる
+    # stroke_width=1 で明朝体を程よく太く見せる
     tmp_d.text((sq // 2, sq // 2), char, fill=(*DARK_BROWN, 255),
-               font=font, anchor="mm", stroke_width=2, stroke_fill=(*DARK_BROWN, 255))
+               font=font, anchor="mm", stroke_width=1, stroke_fill=(*DARK_BROWN, 255))
     # 90°時計回りに回転（正方形なのでサイズ不変）
     tmp_rot = tmp.rotate(-90, expand=False)
     # strip と文字セル内で中央配置
@@ -360,42 +360,48 @@ def draw_vertical_title(canvas: Image.Image,
                           strip_w: int, fs_main: int):
     """
     縦書きメインタイトルを文字積み方式で描画する。
-    各文字を縦に積み上げ、帯内で横中央・縦中央寄せ。
+    各文字を縦幅いっぱいに均等配置し、帯内で横中央寄せ。
     「ー」などの長音符は90°時計回りに回転して縦書き表記に合わせる。
     """
     draw = ImageDraw.Draw(canvas)
     num_chars = len(main_title)
     avail_h = y_bot - y_top
 
-    # フォントサイズ: 帯幅の 65% を上限とし、縦に収まるよう自動調整
+    # 上下に少しだけ余白を設ける（avail_h の約 1.5%、最低 12px）
+    v_pad = max(12, avail_h // 65)
+    y_top  = y_top + v_pad
+    avail_h = avail_h - 2 * v_pad
+
+    # フォントサイズ: 帯幅の 65% を上限とし、縦幅いっぱいに収まるよう自動調整
     # 明朝体（ヒラギノ明朝）を使用
     font_size = min(fs_main, max(10, int(strip_w * 0.65)))
     font = get_pillow_font_mincho("Bold", font_size)
     _, ch = get_text_size(draw, "あ", font)
-    char_step = ch + 2
-    total_h = char_step * num_chars
 
-    if total_h > avail_h:
-        font_size = max(8, int(font_size * avail_h / total_h))
+    # 縦幅いっぱいに均等配置
+    char_step = max(ch + 2, avail_h // num_chars)
+
+    # フォントが縦幅に収まらない場合は縮小
+    if (ch + 2) * num_chars > avail_h:
+        font_size = max(8, int(font_size * avail_h / ((ch + 2) * num_chars)))
         font = get_pillow_font_mincho("Bold", font_size)
         _, ch = get_text_size(draw, "あ", font)
-        char_step = ch + 2
-        total_h = char_step * num_chars
+        char_step = avail_h // num_chars
 
-    # 縦方向中央寄せ
-    cur_y = y_top + max(0, (avail_h - total_h) // 2)
+    cur_y = y_top
 
     for char in main_title:
         if char in _VERTICAL_ROTATE_CHARS:
             # 「ー」は90°時計回りに回転して縦棒として描画
-            _paste_rotated_char(canvas, char, font, x, cur_y, strip_w, ch)
+            _paste_rotated_char(canvas, char, font, x, cur_y, strip_w, char_step)
             draw = ImageDraw.Draw(canvas)   # canvas更新後にdrawを再取得
         else:
             cw, _ = get_text_size(draw, char, font)
             cx = x + (strip_w - cw) // 2
-            # stroke_width=2 で明朝体を太く見せる
-            draw.text((cx, cur_y), char, fill=DARK_BROWN, font=font,
-                      stroke_width=2, stroke_fill=DARK_BROWN)
+            # 文字セル内の縦中央に描画、stroke_width=1 で程よく太く
+            char_y = cur_y + (char_step - ch) // 2
+            draw.text((cx, char_y), char, fill=DARK_BROWN, font=font,
+                      stroke_width=1, stroke_fill=DARK_BROWN)
         cur_y += char_step
 
 
@@ -411,19 +417,23 @@ def draw_year_label_strip(draw: ImageDraw.ImageDraw,
     """
     num_chars = max(1, len(year_text))
     avail_h = y_bot - y_top
-    font_size = max(8, (avail_h // num_chars) - 4)
+    # 1文字あたりの均等ステップ
+    char_step = avail_h // num_chars
+    # フォントサイズ: ステップの 1.1 倍まで許容（文字間隔が狭くなるのは可）
+    # strip_w を上限として strip に収める
+    font_size = max(8, min(strip_w, int(char_step * 1.10)))
     font = get_pillow_font_mincho("Bold", font_size)
     _, ch = get_text_size(draw, "あ", font)
-    char_step = ch + 2
-    total_h = char_step * num_chars
-    start_y = y_top + max(0, (avail_h - total_h) // 2)
 
+    cur_y = y_top
     for char in year_text:
         cw, _ = get_text_size(draw, char, font)
         cx = x + (strip_w - cw) // 2
-        draw.text((cx, start_y), char, fill=DARK_BROWN, font=font,
-                  stroke_width=2, stroke_fill=DARK_BROWN)
-        start_y += char_step
+        # char_step が ch より小さい場合は y_top 基準のまま（わずかな重なりを許容）
+        char_y = cur_y + max(0, (char_step - ch) // 2)
+        draw.text((cx, char_y), char, fill=DARK_BROWN, font=font,
+                  stroke_width=1, stroke_fill=DARK_BROWN)
+        cur_y += char_step
 
 
 # ─── 右ストリップ: 第N部ラベルボックス ─────────────────────────────────────
