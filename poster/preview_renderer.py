@@ -118,7 +118,7 @@ def render_poster(data: PosterData, scale: float = 1.0) -> Image.Image:
     draw_year_label_strip(
         draw,
         f"{data.year}年度",
-        sect_x, header_bottom + _v_pad, prog_top_y - ph(0.014),
+        sect_x, header_bottom + _v_pad, prog_top_y - ph(0.005),
         sect_w
     )
 

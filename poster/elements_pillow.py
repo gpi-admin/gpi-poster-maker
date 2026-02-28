@@ -162,7 +162,8 @@ def draw_address(draw: ImageDraw.ImageDraw,
                  address: str, fs: int) -> int:
     """住所を描画。住所エリア下に区切り線を引く。返値: 使用した高さ"""
     font = get_pillow_font("Regular", fs)
-    lines = wrap_text_jp(draw, address, font, w)
+    # 高解像度時のフォントヒンティング差を吸収するため判定幅を気持ち広めにする
+    lines = wrap_text_jp(draw, address, font, w + max(2, fs // 3))
     h = draw_text_multiline(draw, lines, font, x, y, DARK_BROWN, 1.2)
     # 住所エリア下に横線（区切り線）
     line_y = y + h + max(3, int(fs * 0.4))
@@ -523,12 +524,15 @@ def draw_year_label_strip(draw: ImageDraw.ImageDraw,
 def draw_section_label_box(canvas: Image.Image,
                              x: int, y_start: int, y_end: int,
                              strip_w: int, label: str, theme: dict,
-                             pad: int = 9):
+                             pad: int = None):
     """
     角丸長方形の第N部ラベルボックスを右ストリップに描画。
     ラベル文字を縦積みで中央配置する。
     label が長い場合は "第X部" 部分のみ抽出して表示する。
     """
+    # pad を strip_w に比例させて解像度に依存しないようにする（約23%）
+    if pad is None:
+        pad = max(2, int(strip_w * 0.23))
     box_h = y_end - y_start - pad * 2
     if box_h < 20:
         return
