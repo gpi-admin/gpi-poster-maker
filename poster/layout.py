@@ -86,7 +86,7 @@ FS_DATE_BIG    = 0.063   # "5月23日(金)" 超大文字
 FS_TIME_LC     = 0.029   # 左カラム時刻
 FS_MC_BADGE    = 0.015   # 司会バッジ文字
 FS_MC_AFF      = 0.014   # 司会所属
-FS_MC_NAME     = 0.021   # 司会氏名
+FS_MC_NAME     = 0.022   # 司会氏名
 FS_AUD         = 0.016   # 対象
 FS_QR_CAP      = 0.013   # QRキャプション
 FS_FOOTER      = 0.016   # フッター文字
@@ -95,7 +95,7 @@ FS_PROG_TIME   = 0.018   # プログラム時刻 ("19:00 - 19:20")
 FS_PROG_BADGE  = 0.017   # 小バッジ文字
 FS_PROG_TITLE  = 0.024   # 発表タイトル
 FS_PRESENTER   = 0.018   # 所属
-FS_PRES_NAME   = 0.021   # 発表者氏名
+FS_PRES_NAME   = 0.022   # 発表者氏名
 FS_SANSHUUHI   = 0.030   # 参加費無料
 
 FS_V_TITLE     = 0.090   # 縦書きタイトル文字 (正規化高さ)

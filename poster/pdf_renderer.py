@@ -69,7 +69,7 @@ _VERTICAL_ROTATE_CHARS = frozenset("ーｰ")
 
 
 def _ensure_pdf_fonts():
-    for name in (_FONT_REG, _FONT_MINCHO):
+    for name in {_FONT_REG, _FONT_MINCHO}:
         try:
             pdfmetrics.getFont(name)
         except Exception:
@@ -97,16 +97,16 @@ def _draw_text_raw(
     font: str,
     size: float,
     color: tuple,
-    faux_bold: bool = True,
+    stroke_width: float = 0.0,
 ):
     c.saveState()
     txt = c.beginText()
     txt.setTextOrigin(x, baseline_y)
     txt.setFont(font, size)
     txt.setFillColor(_rgb(color))
-    if faux_bold:
+    if stroke_width > 0:
         c.setStrokeColor(_rgb(color))
-        c.setLineWidth(max(0.25, size * 0.03))
+        c.setLineWidth(stroke_width)
         txt.setTextRenderMode(2)  # fill + stroke
     txt.textOut(text)
     c.drawText(txt)
@@ -140,11 +140,10 @@ def _draw_multiline(
     line_spacing: float,
     align: str = "left",
     max_w: float | None = None,
-    faux_bold: bool = True,
 ) -> float:
     if not lines:
         return 0.0
-    asc, _, ch = _font_metrics(font, size)
+    asc, desc, ch = _font_metrics(font, size)
     line_h = ch * line_spacing
     cur_top = y_top
     for line in lines:
@@ -156,7 +155,7 @@ def _draw_multiline(
         else:
             lx = x
         baseline = PDF_H - (cur_top + asc)
-        _draw_text_raw(c, line, lx, baseline, font, size, color, faux_bold=faux_bold)
+        _draw_text_raw(c, line, lx, baseline, font, size, color)
         cur_top += line_h
     return line_h * len(lines)
 
@@ -191,13 +190,13 @@ def _draw_centered_in_box(
     font: str,
     size: float,
     color: tuple,
-    faux_bold: bool = True,
+    y_offset: float = 0.0,
 ):
-    asc, _, ch = _font_metrics(font, size)
+    asc, desc, ch = _font_metrics(font, size)
     tx = x + (w - _text_width(text, font, size)) / 2
-    ty = y_top + (h - ch) / 2
+    ty = y_top + (h - ch) / 2 + y_offset
     baseline = PDF_H - (ty + asc)
-    _draw_text_raw(c, text, tx, baseline, font, size, color, faux_bold=faux_bold)
+    _draw_text_raw(c, text, tx, baseline, font, size, color)
 
 
 def _draw_spaced_text(
@@ -205,6 +204,7 @@ def _draw_spaced_text(
     text: str,
     x: float,
     y_top: float,
+    box_h: float,
     total_w: float,
     font: str,
     size: float,
@@ -217,11 +217,28 @@ def _draw_spaced_text(
     chars_w = sum(widths)
     gap = 0.0 if len(chars) <= 1 else (total_w - chars_w) / (len(chars) - 1)
     asc, _, ch = _font_metrics(font, size)
-    baseline = PDF_H - (y_top + (ch * 0.5) + asc * 0.5)
+    ty = y_top + (box_h - ch) / 2
+    baseline = PDF_H - (ty + asc)
     cx = x
     for chv, wv in zip(chars, widths):
-        _draw_text_raw(c, chv, cx, baseline, font, size, color, faux_bold=False)
+        _draw_text_raw(c, chv, cx, baseline, font, size, color)
         cx += wv + gap
+
+
+def _draw_text_raw_mincho_boldish(
+    c: rl_canvas.Canvas,
+    text: str,
+    x: float,
+    baseline_y: float,
+    font: str,
+    size: float,
+    color: tuple,
+):
+    """明朝体を少しだけ太く見せる専用描画。"""
+    _draw_text_raw(
+        c, text, x, baseline_y, font, size, color,
+        stroke_width=max(0.20, size * 0.018),
+    )
 
 
 def _draw_vertical_stack(
@@ -250,7 +267,7 @@ def _draw_vertical_stack(
     if step * num > avail_h:
         ratio = avail_h / (step * num)
         size = max(8.0, size * ratio)
-        asc, _, ch = _font_metrics(font, size)
+        asc, desc, ch = _font_metrics(font, size)
         gap = max(2.0, ch * gap_ratio)
         step = ch + gap
     cur_top = y_top + (avail_h - step * num) / 2
@@ -262,7 +279,8 @@ def _draw_vertical_stack(
         if chv in _VERTICAL_ROTATE_CHARS:
             # 長音符だけ回転させ、縦書き表現に寄せる
             c.saveState()
-            center_x = x + strip_w / 2
+            # 回転中心を少し左へ寄せて、見た目の中央を補正する
+            center_x = x + strip_w / 2 - size * 0.12
             center_y = PDF_H - (char_top + ch / 2)
             c.translate(center_x, center_y)
             c.rotate(-90)
@@ -270,16 +288,16 @@ def _draw_vertical_stack(
                 c,
                 chv,
                 -lw / 2,
-                -asc + ch / 2,
+                -((asc + desc) / 2.0),
                 font,
                 size,
                 color,
-                faux_bold=True,
+                stroke_width=max(0.20, size * 0.018),
             )
             c.restoreState()
         else:
             baseline = PDF_H - (char_top + asc)
-            _draw_text_raw(c, chv, cx, baseline, font, size, color, faux_bold=True)
+            _draw_text_raw_mincho_boldish(c, chv, cx, baseline, font, size, color)
         cur_top += step
 
 
@@ -363,6 +381,7 @@ def render_poster_pdf(data: PosterData) -> bytes:
         "Gifu Pediatric-residency Intensives",
         header_pad,
         header_top,
+        header_h,
         PDF_W - header_pad * 2,
         _FONT_REG,
         header_font_size,
@@ -382,7 +401,6 @@ def render_poster_pdf(data: PosterData) -> bytes:
         _FONT_REG,
         footer_font_size,
         WHITE,
-        faux_bold=False,
     )
 
     # 左・中央・右の基本位置
@@ -406,7 +424,7 @@ def render_poster_pdf(data: PosterData) -> bytes:
         _FONT_MINCHO,
         ph(FS_V_TITLE),
         DARK_BROWN,
-        top_pad=max(4.0, (footer_top - header_bottom) / 120.0),
+        top_pad=max(10.0, (footer_top - header_bottom) / 80.0),
         bot_pad=max(12.0, (footer_top - header_bottom) / 65.0),
         gap_ratio=0.08,
     )
@@ -425,7 +443,7 @@ def render_poster_pdf(data: PosterData) -> bytes:
             cx = sect_x + (sect_w - lw) / 2
             char_top = cur_top + max(0.0, (step - ch_h) / 2)
             baseline = PDF_H - (char_top + asc)
-            _draw_text_raw(c, chv, cx, baseline, _FONT_MINCHO, fs_year, DARK_BROWN, faux_bold=True)
+            _draw_text_raw_mincho_boldish(c, chv, cx, baseline, _FONT_MINCHO, fs_year, DARK_BROWN)
             cur_top += step
 
     # 左カラム
@@ -436,7 +454,9 @@ def render_poster_pdf(data: PosterData) -> bytes:
     badge_h = ph(BASHO_BH)
     _draw_pill(c, lc_x, cur_y, badge_w, badge_h, (90, 60, 35))
     basho_fs = _fit_font_size("場所", _FONT_REG, badge_w * 0.78, badge_h * 0.75, 8.0)
-    _draw_centered_in_box(c, "場所", lc_x, cur_y, badge_w, badge_h, _FONT_REG, basho_fs, WHITE)
+    _draw_centered_in_box(
+        c, "場所", lc_x, cur_y, badge_w, badge_h, _FONT_REG, basho_fs, WHITE, y_offset=basho_fs * 0.08
+    )
 
     venue_x = lc_x + badge_w + pw(0.009)
     venue_w = pw(LEFT_W) - venue_x - pw(LC_PAD_R)
@@ -584,7 +604,10 @@ def render_poster_pdf(data: PosterData) -> bytes:
         badge_font = _fit_font_size(label, _FONT_REG, lc_w * 0.75, ph(FS_MC_BADGE) + 2, 8.0)
         badge_w2 = min(_text_width(label, _FONT_REG, badge_font) + ph(FS_MC_BADGE) * 2.0, lc_w)
         _draw_pill(c, lc_x, cur_y, badge_w2, badge_h2, theme["accent"])
-        _draw_centered_in_box(c, label, lc_x, cur_y, badge_w2, badge_h2, _FONT_REG, badge_font, WHITE)
+        _draw_centered_in_box(
+            c, label, lc_x, cur_y, badge_w2, badge_h2, _FONT_REG, badge_font, WHITE,
+            y_offset=badge_font * 0.08
+        )
         cur_y += badge_h2 + ph(FS_MC_BADGE) * 0.7
 
         aff_lines = _wrap_jp(person.affiliation, _FONT_REG, fs_mc_aff, lc_w)
@@ -619,7 +642,6 @@ def render_poster_pdf(data: PosterData) -> bytes:
             _FONT_REG,
             fs_sensei,
             DARK_BROWN,
-            faux_bold=False,
         )
         cur_y += line_h * 1.2
 
@@ -636,7 +658,10 @@ def render_poster_pdf(data: PosterData) -> bytes:
     aud_label_fs = _fit_font_size("対象", _FONT_REG, lc_w * 0.45, aud_fs + 2, 8.0)
     aud_badge_w = min(_text_width("対象", _FONT_REG, aud_label_fs) + aud_fs * 2.0, lc_w)
     _draw_pill(c, lc_x, cur_y, aud_badge_w, aud_badge_h, theme["accent"])
-    _draw_centered_in_box(c, "対象", lc_x, cur_y, aud_badge_w, aud_badge_h, _FONT_REG, aud_label_fs, WHITE)
+    _draw_centered_in_box(
+        c, "対象", lc_x, cur_y, aud_badge_w, aud_badge_h, _FONT_REG, aud_label_fs, WHITE,
+        y_offset=aud_label_fs * 0.08
+    )
     cur_y += aud_badge_h + aud_fs * 0.7
 
     col_w = lc_w / 2.0 - 4.0
@@ -691,7 +716,6 @@ def render_poster_pdf(data: PosterData) -> bytes:
             _FONT_REG,
             cap_fs,
             DARK_BROWN,
-            faux_bold=False,
         )
         cap2_w = _text_width(cap2, _FONT_REG, cap2_fs)
         cap2_asc, _, _ = _font_metrics(_FONT_REG, cap2_fs)
@@ -745,7 +769,9 @@ def render_poster_pdf(data: PosterData) -> bytes:
                 fs -= 0.5
             badge_w = min(_text_width(label, _FONT_REG, fs) + bh * 1.8, max_w)
             _draw_pill(c, prog_x, by, badge_w, bh, theme["accent"])
-            _draw_centered_in_box(c, label, prog_x, by, badge_w, bh, _FONT_REG, fs, WHITE)
+            _draw_centered_in_box(
+                c, label, prog_x, by, badge_w, bh, _FONT_REG, fs, WHITE, y_offset=fs * 0.08
+            )
 
         elif block.kind == "title":
             fs = ph(FS_PROG_TITLE) * sc * cs
@@ -786,7 +812,6 @@ def render_poster_pdf(data: PosterData) -> bytes:
                 _FONT_REG,
                 fs_sensei,
                 DARK_BROWN,
-                faux_bold=False,
             )
 
     # 右ストリップ: 第N部ラベルボックス

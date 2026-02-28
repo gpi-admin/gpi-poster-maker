@@ -410,7 +410,7 @@ _VERTICAL_ROTATE_CHARS = frozenset("ーｰ")
 
 
 def _paste_rotated_char(canvas: Image.Image, char: str, font,
-                         x: int, y: int, strip_w: int, ch_ref: int):
+                         x: int, y: int, strip_w: int, ch_ref: int, x_shift: int = 0):
     """文字を90°時計回りに回転してキャンバスに貼り付ける（ー用）。
     anchor="mm" で正方形中心に文字を正確に中央配置してから回転する。
     """
@@ -424,7 +424,7 @@ def _paste_rotated_char(canvas: Image.Image, char: str, font,
     # 90°時計回りに回転（正方形なのでサイズ不変）
     tmp_rot = tmp.rotate(-90, expand=False)
     # strip と文字セル内で中央配置
-    px = x + (strip_w - sq) // 2
+    px = x + (strip_w - sq) // 2 + x_shift
     py = y + (ch_ref - sq) // 2
     base = canvas.convert("RGBA")
     base.paste(tmp_rot, (px, py), tmp_rot)
@@ -479,7 +479,10 @@ def draw_vertical_title(canvas: Image.Image,
     for char in main_title:
         if char in _VERTICAL_ROTATE_CHARS:
             # 「ー」は90°時計回りに回転して縦棒として描画
-            _paste_rotated_char(canvas, char, font, x, cur_y, strip_w, char_step)
+            _paste_rotated_char(
+                canvas, char, font, x, cur_y, strip_w, char_step,
+                x_shift=-max(2, int(font_size * 0.12))
+            )
             draw = ImageDraw.Draw(canvas)   # canvas更新後にdrawを再取得
         else:
             cw, _ = get_text_size(draw, char, font)
