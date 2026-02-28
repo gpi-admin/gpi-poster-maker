@@ -9,6 +9,7 @@ Pillow プレビュー: 794 x 1123 px
 ReportLab PDF:    595.27 x 841.89 pt
 """
 
+import math
 from dataclasses import dataclass, field
 from typing import List
 
@@ -100,9 +101,9 @@ FS_V_YEAR      = 0.022   # 縦書き年度文字
 # 第1部・第2部: 0.90（やや小さく）, 第3部: 1.10（やや大きく）
 SECTION_CONTENT_SCALES = [0.90, 0.90, 1.10]
 
-# タイトルブロック高さ乗数（フォントが小さいほど行間余白が詰まるため補正）
-# cs=0.90 のとき 1.35、cs=1.10 のとき 1.20 で視覚的な余白を統一
-SECTION_TITLE_MULTIPLIERS = [1.20, 1.20, 1.03]
+# タイトルブロック高さ乗数
+# draw_content_title の実際の line_spacing=1.35 と合わせ、1.40 で若干余裕を持たせる
+SECTION_TITLE_MULTIPLIERS = [1.40, 1.40, 1.40]
 
 # ─── バッジサイズ (normalized) ───────────────────────────────────────────
 
@@ -171,9 +172,13 @@ class LayoutEngine:
                     "scale": scale,
                 }))
 
-                # タイトル行数推定（cs が大きいほど1行の文字数が減る）
-                chars_per_line = max(8, int(13 / cs))
-                title_lines = max(1, len(item.title) // chars_per_line + 1)
+                # タイトル行数推定
+                # 実際の描画幅とフォントサイズ（レンダラーと同じ int 丸め）から算出
+                _prog_w_px = (PROG_W - PROG_PAD_L - PROG_PAD_R) * PREVIEW_W
+                _base_px   = int(FS_PROG_TITLE * PREVIEW_H * scale)
+                _font_px   = max(1, int(_base_px * cs))
+                chars_per_line = max(6, int(_prog_w_px / _font_px))
+                title_lines = max(1, math.ceil(len(item.title) / chars_per_line))
                 blocks.append(Block("title", 0, FS_PROG_TITLE * scale * tm * title_lines * cs, {
                     "text": item.title,
                     "scale": scale,

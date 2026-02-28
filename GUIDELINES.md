@@ -117,8 +117,9 @@ GPI_Poster_Maker/
 │   ├── elements_pdf.py       # ReportLab 用描画関数（要素単位）
 │   ├── text_utils.py         # 日本語テキスト処理（折り返し・フィット）
 │   └── qr_generator.py       # URL → QR PIL Image
+├── generate_backgrounds.py   # 12テーマ分の背景画像を生成（グラデーション or Unsplash API）
 ├── themes/
-│   └── color_themes.py       # 5テーマ + カスタム定義
+│   └── color_themes.py       # 12テーマ + カスタム定義（後方互換エイリアスあり）
 ├── utils/
 │   ├── font_manager.py       # Noto Sans JP 管理（自動DL・登録）
 │   └── image_utils.py        # 背景合成ユーティリティ
@@ -153,22 +154,22 @@ ReportLab: n * PDF_H     (841.89 pt) または  n * PDF_W     (595.27 pt)
 ## 4. カラムレイアウト（横方向）
 
 ```
-0%        37%           50%      62%                  100%
-|  左      |  タイトル帯  | 右スト  |  プログラムエリア  |
-|  カラム  |  縦書き帯    | リップ  |  発表内容・時刻   |
+0%       41.5%         52%    57%                   100%
+|  左     |  タイトル帯  | 右スト |  プログラムエリア   |
+|  カラム |  縦書き帯    | リップ |  発表内容・時刻    |
 ```
 
 ※ 縦バー（旧 DIV_X / DIV_W）は廃止。タイトル帯がその位置を兼ねる。
 
 | 定数 | 値 | 説明 |
 | --- | --- | --- |
-| `LEFT_W` | 0.370 | 左カラム幅（0〜37%） |
-| `TITLE_X` | 0.370 | メインタイトル帯左端（= 左カラム右端） |
-| `TITLE_W` | 0.130 | メインタイトル帯幅（37〜50%、中央より左） |
-| `SECT_X` | 0.500 | 右ストリップ左端（= ポスター中央） |
-| `SECT_W` | 0.120 | 右ストリップ幅（50〜62%） |
-| `PROG_X` | 0.620 | プログラムエリア左端（= SECT_X + SECT_W） |
-| `PROG_W` | 0.380 | プログラムエリア幅（62〜100%） |
+| `LEFT_W` | 0.415 | 左カラム幅（0〜41.5%） |
+| `TITLE_X` | 0.415 | メインタイトル帯左端（= 左カラム右端）**変更禁止** |
+| `TITLE_W` | 0.105 | メインタイトル帯幅（41.5〜52%） |
+| `SECT_X` | 0.520 | 右ストリップ左端（= TITLE_X + TITLE_W） |
+| `SECT_W` | 0.050 | 右ストリップ幅（52〜57%） |
+| `PROG_X` | 0.570 | プログラムエリア左端（= SECT_X + SECT_W） |
+| `PROG_W` | 0.430 | プログラムエリア幅（57〜100%） |
 
 ---
 
@@ -178,12 +179,12 @@ ReportLab: n * PDF_H     (841.89 pt) または  n * PDF_W     (595.27 pt)
 |------|-----|------|
 | `HEADER_H` | 0.030 | 上部バー高さ |
 | `FOOTER_H` | 0.034 | 下部バー高さ |
-| `PROG_TOP` | 0.180 | 動的レイアウト開始 Y（年度テキスト分の余白含む） |
+| `PROG_TOP` | 0.230 | 動的レイアウト開始 Y（年度テキスト分の余白含む） |
 | `PROG_BOT` | ≈0.958 | 動的レイアウト終了 Y |
-| `PROG_H` | ≈0.778 | 動的レイアウト利用可能高さ |
+| `PROG_H` | ≈0.728 | 動的レイアウト利用可能高さ |
 
-**PROG_TOP = 0.180 の根拠**: 右ストリップ上部に "2025年度" を縦積み描画するため、
-ヘッダー下（≈34px）からプログラム開始（≈202px）までの ≈168px が年度テキスト領域となる。
+**PROG_TOP = 0.230 の根拠**: 右ストリップ上部に "2025年度" を縦積み描画するため、
+ヘッダー下（≈34px）からプログラム開始（≈258px）までの ≈224px が年度テキスト領域となる。
 
 ---
 
@@ -225,6 +226,22 @@ ReportLab: n * PDF_H     (841.89 pt) または  n * PDF_W     (595.27 pt)
 | `name` | 発表者氏名 |
 | `gap` | セクション間・コンテンツ間スペース |
 
+**タイトルブロック高さ推定:**
+
+`title` ブロックの高さは、実際のレンダラーと同じ int 丸めでピクセル幅・フォントサイズを計算して推定する。
+
+```python
+_prog_w_px = (PROG_W - PROG_PAD_L - PROG_PAD_R) * PREVIEW_W
+_base_px   = int(FS_PROG_TITLE * PREVIEW_H * scale)
+_font_px   = max(1, int(_base_px * cs))
+chars_per_line = max(6, int(_prog_w_px / _font_px))
+title_lines = max(1, math.ceil(len(item.title) / chars_per_line))
+block_h = FS_PROG_TITLE * scale * SECTION_TITLE_MULTIPLIERS[si] * title_lines * cs
+```
+
+`SECTION_TITLE_MULTIPLIERS = [1.40, 1.40, 1.40]` は実際の `draw_text_multiline` の `line_spacing=1.35` に対して
+余裕を持たせた値。この乗数を `line_spacing` より小さくするとタイトルと所属が重なるバグが発生する。
+
 ---
 
 ## 8. 右ストリップの設計仕様
@@ -246,16 +263,31 @@ ReportLab: n * PDF_H     (841.89 pt) または  n * PDF_W     (595.27 pt)
 
 ## 9. テーマカラーシステム
 
-`themes/color_themes.py` に 5テーマ + カスタムを定義。
+`themes/color_themes.py` に 12テーマ + カスタムを定義。
+背景画像は `generate_backgrounds.py` で生成（`assets/illustrations/backgrounds/`）。
 
 | テーマキー | 季節 | 月の目安 |
 |-----------|------|---------|
-| `spring_pink` | 春（桜） | 3〜5月 |
-| `early_summer_green` | 初夏（山） | 5〜6月 |
-| `summer_blue` | 夏（銀河） | 7〜8月 |
-| `autumn_orange` | 秋（紅葉） | 9〜11月 |
-| `winter_christmas` | 冬（クリスマス） | 12〜2月 |
+| `spring_sakura` | 春（桜） | 3〜4月 |
+| `spring_fresh` | 春（新緑） | 4〜5月 |
+| `early_summer_wisteria` | 初夏（藤） | 5月 |
+| `summer_hydrangea` | 梅雨（紫陽花） | 6月 |
+| `summer_ocean` | 夏（海） | 7〜8月 |
+| `summer_night` | 夏夜（銀河） | 8月 |
+| `early_autumn_cosmos` | 初秋（コスモス） | 9月 |
+| `autumn_leaves` | 秋（紅葉） | 10〜11月 |
+| `autumn_ginkgo` | 秋（銀杏） | 11月 |
+| `winter_snow` | 冬（雪景色） | 12〜1月 |
+| `winter_christmas` | 冬（クリスマス） | 12月 |
+| `new_year_sunrise` | 新春（初日の出） | 1〜2月 |
 | `custom` | カスタム | 任意 |
+
+**後方互換エイリアス**（旧キーで保存されたデータは自動変換される）:
+
+- `spring_pink` → `spring_sakura`
+- `early_summer_green` → `early_summer_wisteria`
+- `summer_blue` → `summer_night`
+- `autumn_orange` → `autumn_leaves`
 
 テーマオブジェクトのキー: `accent`, `accent_light`, `title_bar`, `zoom_color`, `bg_image`
 
@@ -349,3 +381,7 @@ streamlit run app.py
 - **DARK_BROWN のインポート**: `preview_renderer.py` では `from themes.color_themes import DARK_BROWN` をファイル末尾でインポートしている（循環インポート対策）。
 
 - **右ストリップ年度テキストと第N部ボックスは独立して描画**: 年度テキストは step 6、ラベルボックスは step 9 で描画。layout 計算後にのみラベルボックスを描画できる。
+
+- **SECTION_TITLE_MULTIPLIERS の重要性**: `layout.py` の `SECTION_TITLE_MULTIPLIERS` は `draw_content_title` の `line_spacing=1.35` と整合している必要がある。この値を `line_spacing` より小さくすると、LayoutEngine のブロック高さ推定が実際の描画より小さくなり、タイトルと所属が重なるバグが発生する。現在値 `[1.40, 1.40, 1.40]` はわずかに余裕を持たせた設定。
+
+- **Streamlit 保存/読み込み**: `_export_state()` / `_import_state()` は `with st.sidebar:` ブロックより**前**に定義する必要がある（実行順序の制約）。保存ファイルには `_version: "1.1"` を付与し、旧テーマキーは `_THEME_ALIASES` で自動変換する。
