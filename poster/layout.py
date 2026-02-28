@@ -74,10 +74,10 @@ PROG_H   = PROG_BOT - PROG_TOP   # ≈ 0.778
 
 FS_HEADER      = 0.018   # ヘッダーバー文字
 FS_VENUE_BIG   = 0.025   # 会場名（建物）
-FS_VENUE_SM    = 0.016   # 部屋・住所
-FS_DATE_LBL    = 0.021   # "2025年" 小ラベル
+FS_VENUE_SM    = 0.013   # 部屋・住所
+FS_DATE_LBL    = 0.032   # "2025年" 小ラベル
 FS_DATE_BIG    = 0.063   # "5月23日(金)" 超大文字
-FS_TIME_LC     = 0.033   # 左カラム時刻
+FS_TIME_LC     = 0.029   # 左カラム時刻
 FS_MC_BADGE    = 0.015   # 司会バッジ文字
 FS_MC_AFF      = 0.014   # 司会所属
 FS_MC_NAME     = 0.021   # 司会氏名
@@ -101,7 +101,7 @@ SECTION_CONTENT_SCALES = [0.90, 0.90, 1.10]
 
 # タイトルブロック高さ乗数（フォントが小さいほど行間余白が詰まるため補正）
 # cs=0.90 のとき 1.35、cs=1.10 のとき 1.20 で視覚的な余白を統一
-SECTION_TITLE_MULTIPLIERS = [1.20, 1.20, 1.10]
+SECTION_TITLE_MULTIPLIERS = [1.20, 1.20, 1.03]
 
 # ─── バッジサイズ (normalized) ───────────────────────────────────────────
 
@@ -165,7 +165,7 @@ class LayoutEngine:
                     blocks.append(Block("gap", 0, 0.007 * scale, {"scale": scale}))
 
                 # 小バッジ
-                blocks.append(Block("sub_badge", 0, (BADGE_SM_H + 0.007) * scale, {
+                blocks.append(Block("sub_badge", 0, (BADGE_SM_H + 0.013) * scale, {
                     "label": item.badge_label,
                     "scale": scale,
                 }))

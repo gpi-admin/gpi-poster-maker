@@ -90,7 +90,7 @@ def init_state():
         "time_range": "19:00 - 20:30",
         "venue_room": "5F 小会議室1",
         "venue_building": "じゅうろくプラザ",
-        "venue_address": "〒500-8856 岐阜県岐阜市橋本町1丁目10-11",
+        "venue_address": "〒500-8856\n岐阜県岐阜市橋本町1丁目10-11",
         "venue_custom": False,
         "registration_url": "",
         "zoom_note": "&zoomミーティング",
@@ -302,22 +302,13 @@ elif step == "2. 開催日時・会場":
 
     with col2:
         st.subheader("会場")
-        st.session_state["venue_custom"] = st.checkbox(
-            "じゅうろくプラザ以外の会場を使用する",
-            value=st.session_state["venue_custom"]
+        st.session_state["venue_building"] = st.text_input(
+            "建物名", value=st.session_state["venue_building"]
         )
-        if st.session_state["venue_custom"]:
-            st.session_state["venue_building"] = st.text_input(
-                "建物名", value=st.session_state["venue_building"]
-            )
-            st.session_state["venue_address"] = st.text_input(
-                "住所", value=st.session_state["venue_address"]
-            )
-        else:
-            st.info("建物: じゅうろくプラザ\n住所: 〒500-8856 岐阜県岐阜市橋本町1丁目10-11")
-            st.session_state["venue_building"] = "じゅうろくプラザ"
-            st.session_state["venue_address"] = "〒500-8856 岐阜県岐阜市橋本町1丁目10-11"
-
+        st.session_state["venue_address"] = st.text_area(
+            "住所", value=st.session_state["venue_address"],
+            height=70, help="改行したい場合はEnterを押してください"
+        )
         st.session_state["venue_room"] = st.text_input(
             "部屋", value=st.session_state["venue_room"],
             help="例: 5F 小会議室1"
@@ -436,7 +427,7 @@ elif step == "6. プログラム":
 
     for i in range(num_sec):
         sec = st.session_state["sections"][i]
-        with st.expander(f"■ {sec['label']}", expanded=(i == 0)):
+        with st.expander(f"■ {sec['label']}", expanded=True):
             col1, col2, col3 = st.columns([2, 1, 1])
             with col1:
                 sec["label"] = st.text_input(

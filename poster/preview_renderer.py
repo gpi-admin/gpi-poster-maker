@@ -123,7 +123,7 @@ def render_poster(data: PosterData, scale: float = 1.0) -> Image.Image:
     # ─── 左カラム ────────────────────────────────────────────────────────
     lc_x  = pw(LC_PAD_L)
     lc_w  = pw(LEFT_W) - pw(LC_PAD_L) - pw(LC_PAD_R)
-    cur_y = header_h + ph(0.014)
+    cur_y = header_h + ph(0.026)
 
     # 場所バッジ + 会場名（横並び）
     badge_w = pw(BASHO_BW)
@@ -139,8 +139,8 @@ def render_poster(data: PosterData, scale: float = 1.0) -> Image.Image:
     )
     cur_y += max(badge_h, venue_h) + ph(0.005)
 
-    # 住所（左カラム幅いっぱいで折り返し）
-    addr_h = draw_address(draw, lc_x, cur_y, lc_w,
+    # 住所（建物名と左端を揃える）
+    addr_h = draw_address(draw, venue_x, cur_y, venue_w,
                            data.venue_address, ph(FS_VENUE_SM))
     cur_y += addr_h + ph(0.018)
 
@@ -186,11 +186,14 @@ def render_poster(data: PosterData, scale: float = 1.0) -> Image.Image:
     cur_y += aud_h + ph(0.010)
 
     # QR コード（左カラム下部）
-    qr_caption = "事前登録はこちらから"
+    qr_caption1 = "事前登録はこちらから"
+    qr_caption2 = "※現地参加の方もこちらから登録してください"
     font_cap = get_pillow_font("Regular", ph(FS_QR_CAP))
     _, cap_h = get_text_size(draw, "あ", font_cap)
+    cap_line_gap = int(cap_h * 0.3)
+    total_cap_h = cap_h * 2 + cap_line_gap
 
-    qr_bottom = footer_y - ph(0.008) - cap_h - ph(0.006)
+    qr_bottom = footer_y - ph(0.008) - total_cap_h - ph(0.006)
     max_qr = qr_bottom - cur_y - ph(0.005)
     qr_size = max(ph(0.08), min(lc_w, max_qr))
 
@@ -198,10 +201,16 @@ def render_poster(data: PosterData, scale: float = 1.0) -> Image.Image:
         qr_img = generate_qr(data.registration_url or "", size_px=qr_size)
         qr_x = lc_x + (lc_w - qr_size) // 2
         draw_qr(canvas, qr_img, qr_x, qr_bottom - qr_size, qr_size)
-        # キャプション
-        cap_cw, _ = get_text_size(draw, qr_caption, font_cap)
-        draw.text((lc_x + (lc_w - cap_cw) // 2, qr_bottom + ph(0.003)),
-                   qr_caption, fill=DARK_BROWN, font=font_cap)
+        # キャプション1行目
+        cap_y = qr_bottom + ph(0.003)
+        cap1_w, _ = get_text_size(draw, qr_caption1, font_cap)
+        draw.text((lc_x + (lc_w - cap1_w) // 2, cap_y),
+                   qr_caption1, fill=DARK_BROWN, font=font_cap)
+        # キャプション2行目（太字）
+        font_cap_bold = get_pillow_font("Bold", ph(FS_QR_CAP))
+        cap2_w, _ = get_text_size(draw, qr_caption2, font_cap_bold)
+        draw.text((lc_x + (lc_w - cap2_w) // 2, cap_y + cap_h + cap_line_gap),
+                   qr_caption2, fill=DARK_BROWN, font=font_cap_bold)
 
     # ─── プログラムエリア ─────────────────────────────────────────────────
     prog_x = pw(PROG_X) + pw(PROG_PAD_L)

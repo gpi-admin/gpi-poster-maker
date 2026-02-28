@@ -110,19 +110,27 @@ def draw_venue_info(draw: ImageDraw.ImageDraw,
     返値: 使用した高さ（px）
     building は建物名（大きめ）、room は部屋名、address は住所（小さめ）。
     """
-    font_b = get_pillow_font("Bold", fs_big)
     font_r = get_pillow_font("Regular", fs_sm)
     cur_y = y
 
-    # 建物名（太字）
-    lines = wrap_text_jp(draw, building, font_b, w)
-    h1 = draw_text_multiline(draw, lines, font_b, x, cur_y, DARK_BROWN, 1.25)
+    # 建物名（太字）- 手動改行なければ1行に収まるようフォントサイズ自動調整
+    if "\n" in building:
+        font_b = get_pillow_font("Bold", fs_big)
+        lines = building.split("\n")
+        h1 = draw_text_multiline(draw, lines, font_b, x, cur_y, DARK_BROWN, 1.25)
+    else:
+        font_b = fit_font_in_box(draw, building, "Bold", w, fs_big * 3,
+                                  max_size=fs_big, min_size=8)
+        _, bh = get_text_size(draw, building, font_b)
+        draw.text((x, cur_y), building, fill=DARK_BROWN, font=font_b)
+        h1 = int(bh * 1.25)
     cur_y += h1
 
-    # 部屋名
+    # 部屋名（右寄せ）
     if room:
         lines = wrap_text_jp(draw, room, font_r, w)
-        h2 = draw_text_multiline(draw, lines, font_r, x, cur_y, DARK_BROWN, 1.2)
+        h2 = draw_text_multiline(draw, lines, font_r, x, cur_y, DARK_BROWN, 1.2,
+                                  align="right", max_w=w)
         cur_y += h2
 
     return cur_y - y
@@ -184,6 +192,65 @@ def draw_zoom_section(draw: ImageDraw.ImageDraw,
 
 # ─── 左カラム: 日付・時刻 ─────────────────────────────────────────────────
 
+def _draw_date_oneline(draw: ImageDraw.ImageDraw,
+                        x: int, y: int, w: int,
+                        date_str: str, fs_big: int, fill: tuple) -> int:
+    """
+    "5月23日(金)" を1行で混合サイズ描画（折り返しなし）。
+    数字: fs_big × 0.75（やや小さく）
+    月・日・曜日カッコ: fs_big × 0.40（だいぶ小さく）
+    各セグメントをベースライン下揃えで描画する。
+    返値: 使用した高さ（px）
+    """
+    fs_num  = max(10, int(fs_big * 0.75))
+    fs_kana = max(8,  int(fs_big * 0.50))
+    font_num  = get_pillow_font("Black", fs_num)
+    font_kana = get_pillow_font("Bold",  fs_kana)
+
+    # 文字列をセグメントに分割（数字 vs 非数字）
+    segments = []
+    current = ""
+    current_is_num = None
+    for ch in date_str:
+        is_num = ch.isdigit()
+        if current_is_num is None:
+            current_is_num = is_num
+        if is_num != current_is_num:
+            segments.append((current, current_is_num))
+            current = ch
+            current_is_num = is_num
+        else:
+            current += ch
+    if current:
+        segments.append((current, current_is_num))
+
+    # 総幅・最大高さを計算（幅超過時はスケールダウン）
+    def _measure(segs, fn, fk):
+        tw = sum(get_text_size(draw, t, fn if n else fk)[0] for t, n in segs)
+        th = max(get_text_size(draw, t, fn if n else fk)[1] for t, n in segs)
+        return tw, th
+
+    total_w, max_h = _measure(segments, font_num, font_kana)
+    if total_w > w:
+        ratio = w / total_w
+        fs_num  = max(8, int(fs_num  * ratio))
+        fs_kana = max(6, int(fs_kana * ratio))
+        font_num  = get_pillow_font("Black", fs_num)
+        font_kana = get_pillow_font("Bold",  fs_kana)
+        total_w, max_h = _measure(segments, font_num, font_kana)
+
+    # ベースライン下揃えで描画
+    baseline = y + max_h
+    cur_x = x
+    for text, is_num in segments:
+        font = font_num if is_num else font_kana
+        tw, th = get_text_size(draw, text, font)
+        draw.text((cur_x, baseline - th), text, fill=fill, font=font)
+        cur_x += tw
+
+    return max_h
+
+
 def draw_date_time_left(draw: ImageDraw.ImageDraw,
                          x: int, y: int, w: int,
                          event_date: str,
@@ -210,23 +277,22 @@ def draw_date_time_left(draw: ImageDraw.ImageDraw,
         year_label = ""
         date_main  = event_date
 
-    # 年ラベル (小)
+    # 年ラベル（Bold・やや大きめ）
+    yr_indent = max(3, int(fs_lbl * 0.3))
     if year_label:
-        font_yr = get_pillow_font("Regular", fs_lbl)
-        draw.text((x, cur_y), year_label, fill=DARK_BROWN, font=font_yr)
+        font_yr = get_pillow_font("Bold", fs_lbl)
+        draw.text((x + yr_indent, cur_y), year_label, fill=DARK_BROWN, font=font_yr)
         _, yr_h = get_text_size(draw, year_label, font_yr)
-        cur_y += yr_h + 2
+        cur_y += yr_h + int(fs_lbl * 0.2)
 
-    # 大きな日付
-    font_big = get_pillow_font("Black", fs_big)
-    lines = wrap_text_jp(draw, date_main, font_big, w)
-    h_date = draw_text_multiline(draw, lines, font_big, x, cur_y, DARK_BROWN, 1.15)
-    cur_y += h_date + int(fs_big * 0.08)
+    # 大きな日付（数字大・月日曜小・1行）
+    h_date = _draw_date_oneline(draw, x, cur_y, w, date_main, fs_big, DARK_BROWN)
+    cur_y += h_date + int(fs_big * 0.18)
 
     # 時刻
     font_time = get_pillow_font("Bold", fs_time)
-    lines = wrap_text_jp(draw, time_range, font_time, w)
-    h_time = draw_text_multiline(draw, lines, font_time, x, cur_y, DARK_BROWN, 1.2)
+    lines = wrap_text_jp(draw, time_range, font_time, w - yr_indent)
+    h_time = draw_text_multiline(draw, lines, font_time, x + yr_indent, cur_y, DARK_BROWN, 1.2)
     cur_y += h_time
 
     return cur_y - y
@@ -258,13 +324,13 @@ def draw_mc_section(draw: ImageDraw.ImageDraw,
     badge_w = tw + int(fs_badge * 2.0)
     badge_w = min(badge_w, w)
     _draw_pill(draw, x, cur_y, badge_w, badge_h, theme["accent"], badge_label, font_b, WHITE)
-    cur_y += badge_h + int(fs_badge * 0.3)
+    cur_y += badge_h + int(fs_badge * 0.7)
 
     # 所属
     font_aff = get_pillow_font("Regular", fs_aff)
     lines = wrap_text_jp(draw, person.affiliation, font_aff, w)
     h_aff = draw_text_multiline(draw, lines, font_aff, x, cur_y, DARK_BROWN, 1.2)
-    cur_y += h_aff
+    cur_y += h_aff + int(fs_aff * 0.5)
 
     # 氏名（太字）+ 先生（レギュラー・小さめ）を右寄せで組み合わせ描画
     font_nm = get_pillow_font("Bold", fs_name)
@@ -306,7 +372,7 @@ def draw_audience_section(draw: ImageDraw.ImageDraw,
     badge_w = min(badge_w, w)
     _draw_pill(draw, x, cur_y, badge_w, badge_h,
                theme["accent"], "対象", font_lbl, WHITE)
-    cur_y += badge_h + int(fs * 0.35)
+    cur_y += badge_h + int(fs * 0.7)
 
     # 箇条書き（2カラム）
     font_item = get_pillow_font("Regular", fs)
