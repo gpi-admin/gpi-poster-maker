@@ -677,7 +677,7 @@ elif step == "7. イラスト & 出力":
 
             with dl_col2:
                 # PDF ダウンロード（ベクター・Illustrator 編集可）
-                if st.button("📄 PDF を生成 (Illustrator編集可)", use_container_width=True):
+                if st.button("📄 PDF を生成 (印刷用)", use_container_width=True):
                     with st.spinner("ベクターPDFを生成中..."):
                         try:
                             import importlib
@@ -693,5 +693,24 @@ elif step == "7. イラスト & 出力":
                             )
                         except Exception as e:
                             st.error(f"PDF生成エラー: {e}")
+                            import traceback
+                            st.code(traceback.format_exc())
+
+                if st.button("🎨 SVG を生成 (Illustrator編集用)", use_container_width=True):
+                    with st.spinner("SVGを生成中..."):
+                        try:
+                            import importlib
+                            svg_mod = importlib.import_module("poster.svg_renderer")
+                            svg_mod = importlib.reload(svg_mod)
+                            svg_str = svg_mod.render_poster_svg(st.session_state["poster_data"])
+                            st.download_button(
+                                label="📥 SVG をダウンロード (Illustratorで全テキスト編集可)",
+                                data=svg_str.encode("utf-8"),
+                                file_name=f"GPI_{year}_{num:02d}.svg",
+                                mime="image/svg+xml",
+                                use_container_width=True,
+                            )
+                        except Exception as e:
+                            st.error(f"SVG生成エラー: {e}")
                             import traceback
                             st.code(traceback.format_exc())

@@ -63,17 +63,85 @@ from themes.color_themes import DARK_BROWN, WHITE, get_theme
 from utils.image_utils import make_background_layer
 
 ASSETS_DIR = Path(__file__).parent.parent / "assets"
-_FONT_REG = "HeiseiKakuGo-W5"
-_FONT_MINCHO = "HeiseiMin-W3"
+_BIZ_FONT_DIR = ASSETS_DIR / "fonts" / "BIZUDGothic"
 _VERTICAL_ROTATE_CHARS = frozenset("ーｰ")
+
+# フォント名定数（_ensure_pdf_fonts() 呼び出し後に確定する）
+_FONT_REG = "HeiseiKakuGo-W5"      # ゴシック体
+_FONT_MINCHO = "HeiseiMin-W3"      # 明朝体
+_FONT_BOLD = "HeiseiKakuGo-W5"     # 太字ゴシック（BIZ UDがあれば差し替え）
+_USE_TTF = False                    # TrueType埋め込みが有効かどうか
+
+
+def _register_biz_ud_fonts() -> bool:
+    """
+    BIZ UD Gothic/Mincho の TrueType フォントを ReportLab に登録する。
+    assets/fonts/BIZUDGothic/ にフォントファイルが揃っている場合のみ有効。
+    TrueType 埋め込みにより Illustrator でテキスト編集が可能になる。
+    """
+    from reportlab.pdfbase.ttfonts import TTFont
+
+    reg_path = _BIZ_FONT_DIR / "BIZUDGothic-Regular.ttf"
+    bold_path = _BIZ_FONT_DIR / "BIZUDGothic-Bold.ttf"
+    mincho_path = _BIZ_FONT_DIR / "BIZUDMincho-Regular.ttf"
+
+    # Regular と Bold の両方が揃っていることを確認
+    if not (reg_path.exists() and bold_path.exists()):
+        return False
+
+    try:
+        # 未登録の場合のみ登録
+        try:
+            pdfmetrics.getFont("BIZUDGothic-Regular")
+        except Exception:
+            pdfmetrics.registerFont(TTFont("BIZUDGothic-Regular", str(reg_path)))
+
+        try:
+            pdfmetrics.getFont("BIZUDGothic-Bold")
+        except Exception:
+            pdfmetrics.registerFont(TTFont("BIZUDGothic-Bold", str(bold_path)))
+
+        if mincho_path.exists():
+            try:
+                pdfmetrics.getFont("BIZUDMincho-Regular")
+            except Exception:
+                pdfmetrics.registerFont(TTFont("BIZUDMincho-Regular", str(mincho_path)))
+
+        return True
+    except Exception as e:
+        print(f"BIZ UD フォント登録エラー: {e}")
+        return False
 
 
 def _ensure_pdf_fonts():
-    for name in {_FONT_REG, _FONT_MINCHO}:
+    """
+    PDF 用フォントを登録し、グローバル定数を設定する。
+    BIZ UD Gothic (TrueType) が利用可能ならそちらを優先する（Illustrator でテキスト編集可能）。
+    利用できない場合は CID フォント (HeiseiKakuGo-W5) にフォールバックする。
+    """
+    global _FONT_REG, _FONT_MINCHO, _FONT_BOLD, _USE_TTF
+
+    if _USE_TTF:
+        return  # 既に TTF 設定済み
+
+    if _register_biz_ud_fonts():
+        _FONT_REG = "BIZUDGothic-Regular"
+        _FONT_BOLD = "BIZUDGothic-Bold"
+        # 明朝体: BIZ UD Mincho があれば使う、なければゴシックで代替
+        mincho_path = _BIZ_FONT_DIR / "BIZUDMincho-Regular.ttf"
+        _FONT_MINCHO = "BIZUDMincho-Regular" if mincho_path.exists() else "BIZUDGothic-Regular"
+        _USE_TTF = True
+        return
+
+    # フォールバック: ReportLab 組み込み CID フォント（非埋め込み）
+    for name in {"HeiseiKakuGo-W5", "HeiseiMin-W3"}:
         try:
             pdfmetrics.getFont(name)
         except Exception:
             pdfmetrics.registerFont(UnicodeCIDFont(name))
+    _FONT_REG = "HeiseiKakuGo-W5"
+    _FONT_BOLD = "HeiseiKakuGo-W5"
+    _FONT_MINCHO = "HeiseiMin-W3"
 
 
 def _rgb(c: tuple) -> Color:
@@ -234,11 +302,11 @@ def _draw_text_raw_mincho_boldish(
     size: float,
     color: tuple,
 ):
-    """明朝体を少しだけ太く見せる専用描画。"""
-    _draw_text_raw(
-        c, text, x, baseline_y, font, size, color,
-        stroke_width=max(0.20, size * 0.018),
-    )
+    """明朝体描画。
+    注: stroke_width（fill+stroke = テキストレンダーモード2）は使わない。
+    Illustratorはレンダーモード0（fill only）以外のテキストをアウトライン化するため。
+    """
+    _draw_text_raw(c, text, x, baseline_y, font, size, color)
 
 
 def _draw_vertical_stack(
@@ -284,16 +352,8 @@ def _draw_vertical_stack(
             center_y = PDF_H - (char_top + ch / 2)
             c.translate(center_x, center_y)
             c.rotate(-90)
-            _draw_text_raw(
-                c,
-                chv,
-                -lw / 2,
-                -((asc + desc) / 2.0),
-                font,
-                size,
-                color,
-                stroke_width=max(0.20, size * 0.018),
-            )
+            # stroke_width は使わない（テキストレンダーモード2はIllustratorがアウトライン化するため）
+            _draw_text_raw(c, chv, -lw / 2, -((asc + desc) / 2.0), font, size, color)
             c.restoreState()
         else:
             baseline = PDF_H - (char_top + asc)
@@ -310,10 +370,17 @@ def _draw_background_image(c: rl_canvas.Canvas, data: PosterData):
         return
     try:
         layer = make_background_layer(str(p), PREVIEW_W, PREVIEW_H, opacity=data.bg_opacity)
+        # Illustrator互換: 透明チャンネルを白背景に合成して透明度を排除する
+        # mask="auto" を使うとPDFに透明度が生じ、Illustratorがテキストをアウトライン化してしまう
+        white = Image.new("RGB", (layer.width, layer.height), (255, 255, 255))
+        if layer.mode == "RGBA":
+            white.paste(layer, mask=layer.split()[3])
+        else:
+            white.paste(layer.convert("RGB"))
         buf = io.BytesIO()
-        layer.save(buf, format="PNG")
+        white.save(buf, format="PNG")
         buf.seek(0)
-        c.drawImage(ImageReader(buf), 0, 0, width=PDF_W, height=PDF_H, mask="auto")
+        c.drawImage(ImageReader(buf), 0, 0, width=PDF_W, height=PDF_H)
     except Exception as e:
         print(f"背景画像PDF埋め込みエラー: {e}")
 
@@ -335,10 +402,13 @@ def _draw_decorative(c: rl_canvas.Canvas, img_path: str, x: float, y_top: float,
         else:
             dh = size
             dw = size * aspect
+        # Illustrator互換: 透明チャンネルを白背景に合成して透明度を排除する
+        white = Image.new("RGB", (iw, ih), (255, 255, 255))
+        white.paste(img, mask=img.split()[3])
         buf = io.BytesIO()
-        img.save(buf, format="PNG")
+        white.save(buf, format="PNG")
         buf.seek(0)
-        c.drawImage(ImageReader(buf), x, PDF_H - (y_top + dh), dw, dh, mask="auto")
+        c.drawImage(ImageReader(buf), x, PDF_H - (y_top + dh), dw, dh)
     except Exception as e:
         print(f"装飾画像PDF埋め込みエラー: {e}")
 
@@ -698,10 +768,16 @@ def render_poster_pdf(data: PosterData) -> bytes:
     if qr_size > ph(0.06):
         qr_img = generate_qr(data.registration_url or "", size_px=max(100, int(qr_size)))
         qr_x = lc_x + (lc_w - qr_size) / 2
+        # Illustrator互換: QRコードをRGBに変換して透明度を排除する
+        qr_rgb = Image.new("RGB", qr_img.size, (255, 255, 255))
+        if qr_img.mode == "RGBA":
+            qr_rgb.paste(qr_img, mask=qr_img.split()[3])
+        else:
+            qr_rgb.paste(qr_img.convert("RGB"))
         qr_buf = io.BytesIO()
-        qr_img.save(qr_buf, format="PNG")
+        qr_rgb.save(qr_buf, format="PNG")
         qr_buf.seek(0)
-        c.drawImage(ImageReader(qr_buf), qr_x, PDF_H - qr_bottom, qr_size, qr_size, mask="auto")
+        c.drawImage(ImageReader(qr_buf), qr_x, PDF_H - qr_bottom, qr_size, qr_size)
 
         cap1 = "事前登録はこちらから"
         cap2 = "※現地参加の方も登録してください"
