@@ -145,15 +145,17 @@ with st.sidebar:
         help="入力内容を JSON ファイルとして保存します",
     )
 
+    _lc = st.session_state.get("_load_counter", 0)
     uploaded_json = st.file_uploader(
         "保存済みデータを読み込む",
         type=["json"],
-        key="load_json",
+        key=f"load_json_{_lc}",
         help="以前保存した JSON ファイルを選択するとフォームに反映されます",
     )
     if uploaded_json is not None:
         _import_state(uploaded_json.read())
-        st.success("✅ 読み込み完了！ページを再操作してください。")
+        st.session_state["_load_counter"] = _lc + 1  # キーを変えてアップローダーをリセット
+        st.success("✅ 読み込み完了！")
         st.rerun()
 
 # ─── セッションステート 初期化 ────────────────────────────────────────────
@@ -376,7 +378,11 @@ elif step == "2. 開催日時・会場":
 
     col1, col2 = st.columns(2)
     with col1:
-        date_val = st.date_input("開催日", key="_event_date_raw")
+        date_val = st.date_input(
+            "開催日",
+            value=st.session_state.get("_event_date_raw", date.today()),
+        )
+        st.session_state["_event_date_raw"] = date_val
         # 曜日を日本語で生成
         weekdays = ["月", "火", "水", "木", "金", "土", "日"]
         wd = weekdays[date_val.weekday()]
