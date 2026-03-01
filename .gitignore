@@ -10,3 +10,4 @@ assets/uploaded/
 .streamlit/secrets.toml
 *.egg-info/
 dist/
+assets/fonts/NotoSansJP/
