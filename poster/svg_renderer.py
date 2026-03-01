@@ -71,6 +71,7 @@ _VERTICAL_ROTATE_CHARS = frozenset("ーｰ")
 
 # ReportLab 登録名（メトリクス計算用）
 _RL_GOTHIC = "BIZUDGothic-Regular"
+_RL_GOTHIC_BOLD = "BIZUDGothic-Bold"
 _RL_MINCHO = "BIZUDMincho-Regular"
 
 # SVG font-family 名（デフォルト: macOS システムフォント ヒラギノ）
@@ -141,8 +142,9 @@ def _ensure_svg_fonts():
     if _svg_fonts_registered:
         return
     for name, fname in [
-        (_RL_GOTHIC, "BIZUDGothic-Regular.ttf"),
-        (_RL_MINCHO, "BIZUDMincho-Regular.ttf"),
+        (_RL_GOTHIC,      "BIZUDGothic-Regular.ttf"),
+        (_RL_GOTHIC_BOLD, "BIZUDGothic-Bold.ttf"),
+        (_RL_MINCHO,      "BIZUDMincho-Regular.ttf"),
     ]:
         path = _BIZ_FONT_DIR / fname
         if path.exists():
@@ -897,7 +899,7 @@ def render_poster_svg(data: PosterData, font_key: str = SVG_FONT_DEFAULT) -> str
     _draw_text_at_baseline(c, free_text, free_x, free_baseline, _SVG_GOTHIC, free_fs, (220, 30, 30))
 
     # プログラムレイアウト
-    layout = LayoutEngine(data, render_scale=1.0).compute()
+    layout = LayoutEngine(data, use_reportlab=True).compute()
     section_positions: list[dict] = []
 
     for block in layout:

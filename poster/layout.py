@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import List
 
 from PIL import Image, ImageDraw
+from reportlab.pdfbase import pdfmetrics
 
 from poster.text_utils import get_text_size, wrap_text_jp
 from utils.font_manager import get_pillow_font
@@ -130,14 +131,26 @@ class LayoutEngine:
     プログラムセクションを動的にレイアウトする。
     フォントスケールを 1.0 → 0.70 まで下げながら利用可能エリアに収める。
     MC/座長は含まない（左カラムで描画）。
+    use_reportlab=True にすると ReportLab BIZ UDGothic メトリクスを使用（SVG レンダラー用）。
     """
 
-    def __init__(self, poster_data, render_scale: float = 1.0):
+    # ReportLab フォント名（SVGレンダラーと同じ）
+    _RL_GOTHIC = "BIZUDGothic-Regular"
+    _RL_GOTHIC_BOLD = "BIZUDGothic-Bold"
+    _RL_MINCHO = "BIZUDMincho-Regular"
+
+    def __init__(self, poster_data, render_scale: float = 1.0, use_reportlab: bool = False):
         self.data = poster_data
         self.render_scale = render_scale
-        self.canvas_w = max(1, int(PREVIEW_W * render_scale))
-        self.canvas_h = max(1, int(PREVIEW_H * render_scale))
-        self.prog_w_px = max(1, int((PROG_W - PROG_PAD_L - PROG_PAD_R) * self.canvas_w))
+        self.use_reportlab = use_reportlab
+        if use_reportlab:
+            self.canvas_w = PDF_W
+            self.canvas_h = PDF_H
+            self.prog_w_pt = (PROG_W - PROG_PAD_L - PROG_PAD_R) * PDF_W
+        else:
+            self.canvas_w = max(1, int(PREVIEW_W * render_scale))
+            self.canvas_h = max(1, int(PREVIEW_H * render_scale))
+            self.prog_w_px = max(1, int((PROG_W - PROG_PAD_L - PROG_PAD_R) * self.canvas_w))
         self._measure_draw = ImageDraw.Draw(Image.new("RGB", (1, 1), "white"))
 
     def compute(self) -> List[Block]:
@@ -225,6 +238,8 @@ class LayoutEngine:
     def _font_px(self, fs_norm: float, scale: float, content_scale: float = 1.0) -> int:
         return max(1, int(fs_norm * self.canvas_h * scale * content_scale))
 
+    # ── Pillow 計測（プレビュー用） ──────────────────────────────────────────
+
     def _measure_multiline_height(self, font, lines: List[str], line_spacing: float) -> int:
         if not lines:
             return 0
@@ -241,12 +256,16 @@ class LayoutEngine:
         content_scale: float,
         line_spacing: float,
     ) -> tuple[list[str], float]:
+        if self.use_reportlab:
+            return self._rl_measure_wrapped_block(text, weight, fs_norm, scale, content_scale, line_spacing)
         font = get_pillow_font(weight, self._font_px(fs_norm, scale, content_scale))
         lines = wrap_text_jp(self._measure_draw, text, font, self.prog_w_px)
         h_px = self._measure_multiline_height(font, lines, line_spacing)
         return lines, (h_px / self.canvas_h)
 
     def _measure_name_block(self, name: str, scale: float, content_scale: float) -> float:
+        if self.use_reportlab:
+            return self._rl_measure_name_block(name, scale, content_scale)
         if not name:
             return 0.0
 
@@ -263,6 +282,59 @@ class LayoutEngine:
         lines = wrap_text_jp(self._measure_draw, name, font_n, self.prog_w_px)
         h_px = self._measure_multiline_height(font_n, lines, 1.25)
         return h_px / self.canvas_h
+
+    # ── ReportLab 計測（SVG レンダラー用） ──────────────────────────────────
+
+    @staticmethod
+    def _rl_wrap(text: str, rl_font: str, size: float, max_w: float) -> list[str]:
+        """ReportLab メトリクスによる日本語テキスト折り返し。"""
+        lines: list[str] = []
+        for para in text.split("\n"):
+            cur = ""
+            for ch in para:
+                test = cur + ch
+                if pdfmetrics.stringWidth(test, rl_font, size) > max_w and cur:
+                    lines.append(cur)
+                    cur = ch
+                else:
+                    cur = test
+            if cur:
+                lines.append(cur)
+        return lines
+
+    @staticmethod
+    def _rl_ch(rl_font: str, size: float) -> float:
+        """ReportLab フォントの文字高さ（ascent - descent）。"""
+        asc, desc = pdfmetrics.getAscentDescent(rl_font, size)
+        return asc - desc
+
+    def _rl_measure_wrapped_block(
+        self,
+        text: str,
+        weight: str,
+        fs_norm: float,
+        scale: float,
+        content_scale: float,
+        line_spacing: float,
+    ) -> tuple[list[str], float]:
+        size = fs_norm * self.canvas_h * scale * content_scale
+        rl_font = self._RL_GOTHIC_BOLD if weight in ("Bold", "Black") else self._RL_GOTHIC
+        lines = self._rl_wrap(text, rl_font, size, self.prog_w_pt)
+        if not lines:
+            return [], 0.0
+        ch = self._rl_ch(rl_font, size)
+        h = ch * line_spacing * len(lines)
+        return lines, h / self.canvas_h
+
+    def _rl_measure_name_block(self, name: str, scale: float, content_scale: float) -> float:
+        if not name:
+            return 0.0
+        fs_name = FS_PRES_NAME * self.canvas_h * scale * content_scale
+        fs_sensei = max(8.0, fs_name * 0.85)
+        nm_h = self._rl_ch(self._RL_GOTHIC_BOLD, fs_name)
+        ss_h = self._rl_ch(self._RL_GOTHIC, fs_sensei)
+        line_h = max(nm_h, ss_h) * 1.25
+        return line_h / self.canvas_h
 
     def _assign_y(self, blocks: List[Block]) -> List[Block]:
         """Y座標を順番に割り当てる"""
