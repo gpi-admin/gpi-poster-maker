@@ -696,11 +696,19 @@ elif step == "7. イラスト & 出力":
                     import cairosvg
                     svg_mod = importlib.import_module("poster.svg_renderer")
                     svg_mod = importlib.reload(svg_mod)
+                    user_font_key = st.session_state.get("svg_font_key", "hiragino")
+                    # SVGダウンロード用（ユーザー選択フォント）
                     svg_str = svg_mod.render_poster_svg(
                         poster_data,
-                        font_key=st.session_state.get("svg_font_key", "hiragino"),
+                        font_key=user_font_key,
                     )
-                    svg_bytes = svg_str.encode("utf-8")
+                    # PNG/PDF レンダリング用は常に BIZ UD（埋め込み済み、全環境で正確に描画）
+                    render_key = user_font_key if user_font_key == "biz_ud" else "biz_ud"
+                    svg_for_render = svg_mod.render_poster_svg(
+                        poster_data,
+                        font_key=render_key,
+                    )
+                    svg_bytes = svg_for_render.encode("utf-8")
 
                     # プレビュー用 PNG（scale=2）
                     preview_png = cairosvg.svg2png(bytestring=svg_bytes, scale=2)
