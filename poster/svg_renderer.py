@@ -86,11 +86,15 @@ _SVG_MINCHO = "Hiragino Mincho ProN"
 @dataclass
 class SVGFontConfig:
     key: str
-    gothic_family: str
+    gothic_family: str          # @font-face 名（埋め込み用）
     mincho_family: str
     gothic_regular_path: Path | None = None
     gothic_bold_path: Path | None = None
     mincho_regular_path: Path | None = None
+    # fontconfig/システムフォント名（embed_fonts=False 時に使用）
+    # 空文字のときは gothic_family / mincho_family をそのまま使用
+    system_gothic_family: str = ""
+    system_mincho_family: str = ""
 
 
 # 起動時に BIZ UD フォントを base64 でプリロード（@font-face 埋め込み用）
@@ -117,11 +121,13 @@ SVG_FONT_PRESETS: dict[str, SVGFontConfig] = {
     ),
     "biz_ud": SVGFontConfig(
         key="biz_ud",
-        gothic_family="BIZUDGothic",
+        gothic_family="BIZUDGothic",        # @font-face 定義名
         mincho_family="BIZUDMincho",
         gothic_regular_path=_BIZ_FONT_DIR / "BIZUDGothic-Regular.ttf",
         gothic_bold_path=_BIZ_FONT_DIR / "BIZUDGothic-Bold.ttf",
         mincho_regular_path=_BIZ_FONT_DIR / "BIZUDMincho-Regular.ttf",
+        system_gothic_family="BIZ UDGothic",   # fontconfig での実際のファミリー名
+        system_mincho_family="BIZ UDMincho",
     ),
 }
 SVG_FONT_DEFAULT = "hiragino"
@@ -538,7 +544,11 @@ def _embed_image_alpha(img: Image.Image) -> bytes:
 # メイン描画関数
 # ---------------------------------------------------------------------------
 
-def render_poster_svg(data: PosterData, font_key: str = SVG_FONT_DEFAULT) -> str:
+def render_poster_svg(
+    data: PosterData,
+    font_key: str = SVG_FONT_DEFAULT,
+    embed_fonts: bool = True,
+) -> str:
     """
     Illustrator 編集可能な SVG を生成する。
 
@@ -546,6 +556,8 @@ def render_poster_svg(data: PosterData, font_key: str = SVG_FONT_DEFAULT) -> str
         data: ポスターデータ
         font_key: フォントプリセットキー（SVG_FONT_PRESETS のキー）
                   "hiragino" (デフォルト・macOS のみ) / "biz_ud" (全環境・埋め込み)
+        embed_fonts: True=@font-face でフォントを SVG 内に埋め込む（ダウンロード用）
+                     False=埋め込みなし（システムフォントに頼る・cairosvg 用）
     """
     _ensure_svg_fonts()
     fc = SVG_FONT_PRESETS.get(font_key, SVG_FONT_PRESETS[SVG_FONT_DEFAULT])
@@ -557,6 +569,17 @@ def render_poster_svg(data: PosterData, font_key: str = SVG_FONT_DEFAULT) -> str
     def ph(n: float) -> float:
         return n * H
 
+    # embed_fonts=False のときは @font-face 埋め込みを無効化し、システムフォント名を使用
+    if not embed_fonts:
+        from dataclasses import replace as _dc_replace
+        fc = _dc_replace(
+            fc,
+            gothic_family=fc.system_gothic_family or fc.gothic_family,
+            mincho_family=fc.system_mincho_family or fc.mincho_family,
+            gothic_regular_path=None,
+            gothic_bold_path=None,
+            mincho_regular_path=None,
+        )
     c = SVGCanvas(W, H, font_config=fc)
     # モジュールレベルの _SVG_GOTHIC/_SVG_MINCHO をローカル変数でシャドウ
     # → 以降の描画コードはすべてこのフォント名を使用する
