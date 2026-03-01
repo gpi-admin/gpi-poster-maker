@@ -8,6 +8,8 @@ import streamlit as st
 import io
 import json
 import sys
+import tempfile
+import uuid
 from pathlib import Path
 from datetime import date
 
@@ -62,7 +64,7 @@ st.markdown("---")
 # ─── セーブ / ロード ヘルパー（サイドバーより前に定義が必要）────────────────
 
 _SAVE_KEYS = [
-    "year", "session_num", "theme_key", "custom_accent",
+    "year", "session_num", "theme_key", "custom_accent", "svg_font_key",
     "event_date", "event_date_iso", "time_range",
     "venue_room", "venue_building", "venue_address",
     "registration_url", "zoom_note",
@@ -166,6 +168,7 @@ def init_state():
         "session_num": 1,
         "theme_key": "spring_sakura",
         "custom_accent": "#D26E96",
+        "svg_font_key": "hiragino",
         "event_date": "",
         "event_date_iso": "",
         "_event_date_raw": date.today(),
@@ -231,10 +234,37 @@ def _default_sections():
     ]
 
 
+def _check_password() -> None:
+    """st.secrets に password が設定されている場合のみ認証画面を表示する。"""
+    if "password" not in st.secrets:
+        return  # ローカル開発時はスルー
+    if st.session_state.get("_authenticated"):
+        return
+    st.markdown("### 🔒 ログイン")
+    pwd = st.text_input("パスワードを入力してください", type="password", key="_pwd_input")
+    if pwd:
+        if pwd == st.secrets["password"]:
+            st.session_state["_authenticated"] = True
+            st.rerun()
+        else:
+            st.error("パスワードが違います")
+    st.stop()
+
+
+_check_password()
 init_state()
 
 
 # ─── PosterData 構築ヘルパー ──────────────────────────────────────────────
+
+def _get_session_upload_dir() -> Path:
+    """ユーザーセッションごとの一時アップロードディレクトリを返す（複数ユーザー競合防止）。"""
+    if "_session_upload_dir" not in st.session_state:
+        d = Path(tempfile.gettempdir()) / "gpi_poster" / str(uuid.uuid4())
+        d.mkdir(parents=True, exist_ok=True)
+        st.session_state["_session_upload_dir"] = str(d)
+    return Path(st.session_state["_session_upload_dir"])
+
 
 def _build_poster_data(uploaded_bg=None, uploaded_decos_files=None) -> PosterData:
     ss = st.session_state
@@ -247,9 +277,7 @@ def _build_poster_data(uploaded_bg=None, uploaded_decos_files=None) -> PosterDat
     # 背景パス
     bg_path = None
     if uploaded_bg is not None:
-        # 一時ファイルに保存
-        tmp_path = ASSETS_DIR / "uploaded" / "bg_upload.png"
-        tmp_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = _get_session_upload_dir() / "bg_upload.png"
         with open(tmp_path, "wb") as f:
             f.write(uploaded_bg.read())
         bg_path = str(tmp_path)
@@ -265,8 +293,7 @@ def _build_poster_data(uploaded_bg=None, uploaded_decos_files=None) -> PosterDat
         if p.exists():
             deco_paths.append(str(p))
     if uploaded_decos_files:
-        upload_dir = ASSETS_DIR / "uploaded"
-        upload_dir.mkdir(parents=True, exist_ok=True)
+        upload_dir = _get_session_upload_dir()
         for i, f in enumerate(uploaded_decos_files[:2]):
             p = upload_dir / f"deco_{i}.png"
             with open(p, "wb") as out:
@@ -366,6 +393,23 @@ if step == "1. 基本情報・テーマ":
                 "アクセントカラーを選択",
                 value=st.session_state["custom_accent"]
             )
+
+        from poster.svg_renderer import SVG_FONT_PRESETS, SVG_FONT_DEFAULT
+        _FONT_LABELS = {
+            "hiragino": "ヒラギノ（macOS 推奨）",
+            "biz_ud":   "BIZ UDGothic（全環境対応・クラウド推奨）",
+        }
+        font_keys = list(SVG_FONT_PRESETS.keys())
+        current_font = st.session_state.get("svg_font_key", SVG_FONT_DEFAULT)
+        if current_font not in font_keys:
+            current_font = SVG_FONT_DEFAULT
+        st.session_state["svg_font_key"] = st.selectbox(
+            "フォント",
+            options=font_keys,
+            format_func=lambda k: _FONT_LABELS.get(k, k),
+            index=font_keys.index(current_font),
+            help="Streamlit Cloud など macOS 以外の環境では「BIZ UDGothic」を選択してください",
+        )
 
     st.markdown("---")
     st.subheader("現在の設定")
@@ -651,7 +695,10 @@ elif step == "7. イラスト & 出力":
                     import cairosvg
                     svg_mod = importlib.import_module("poster.svg_renderer")
                     svg_mod = importlib.reload(svg_mod)
-                    svg_str = svg_mod.render_poster_svg(poster_data)
+                    svg_str = svg_mod.render_poster_svg(
+                        poster_data,
+                        font_key=st.session_state.get("svg_font_key", "hiragino"),
+                    )
                     svg_bytes = svg_str.encode("utf-8")
 
                     # プレビュー用 PNG（scale=2）

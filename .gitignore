@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+test_*.png
+test_*.pdf
+tmp_*.pdf
+tmp_*_preview.png
+assets/uploaded/
+.streamlit/secrets.toml
+*.egg-info/
+dist/
