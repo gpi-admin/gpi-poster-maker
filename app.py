@@ -712,6 +712,8 @@ elif step == "7. イラスト & 出力":
             index=font_keys.index(current_font),
             help="Streamlit Cloud など macOS 以外の環境では「BIZ UDGothic」を選択してください",
         )
+        if not _hiragino_available() and st.session_state.get("svg_font_key") == "hiragino":
+            st.info("⚠️ この環境ではヒラギノが使用できないため、プレビュー・PNG・PDF の出力には BIZ UDGothic が使用されます。SVG ダウンロードはヒラギノ指定のままになります。")
 
     with col_right:
         st.subheader("プレビュー & ダウンロード")
