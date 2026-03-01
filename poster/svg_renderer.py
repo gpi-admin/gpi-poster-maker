@@ -125,12 +125,12 @@ SVG_FONT_PRESETS: dict[str, SVGFontConfig] = {
     ),
     "biz_ud": SVGFontConfig(
         key="biz_ud",
-        gothic_family="BIZUDGothic",        # @font-face 定義名
-        mincho_family="BIZUDMincho",
+        gothic_family="BIZ UDGothic",       # フォント内部名と一致させること（cairosvg が @font-face を正しく解決するため）
+        mincho_family="BIZ UDMincho",
         gothic_regular_path=_BIZ_FONT_DIR / "BIZUDGothic-Regular.ttf",
         gothic_bold_path=_BIZ_FONT_DIR / "BIZUDGothic-Bold.ttf",
         mincho_regular_path=_BIZ_FONT_DIR / "BIZUDMincho-Regular.ttf",
-        system_gothic_family="BIZ UDGothic",   # fontconfig での実際のファミリー名
+        system_gothic_family="BIZ UDGothic",
         system_mincho_family="BIZ UDMincho",
         mincho_has_bold=False,  # BIZ UDMincho Bold が存在しないため
     ),
