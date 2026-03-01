@@ -70,9 +70,11 @@ def _install_biz_fonts_for_cairosvg() -> bool:
 
 with st.spinner("フォントを確認中..."):
     font_msgs = init_fonts()
-if font_msgs:
+# トーストはセッション内で1度だけ表示（ステップ切り替え時に再表示しない）
+if font_msgs and not st.session_state.get("_font_msgs_shown"):
     for m in font_msgs:
         st.toast(m, icon="📥")
+    st.session_state["_font_msgs_shown"] = True
 
 # ─── アセットパス ─────────────────────────────────────────────────────────
 

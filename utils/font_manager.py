@@ -92,7 +92,7 @@ def _is_valid_font(path: str) -> bool:
 def get_font_path(weight: str = "Regular") -> str:
     """
     使用可能なフォントパスを返す。
-    優先度: ヒラギノ(macOS) > ダウンロード済みNoto > デフォルト
+    優先度: ヒラギノ(macOS) > BIZ UDGothic(リポジトリ内) > ダウンロード済みNoto
     """
     weight = _resolve_weight(weight)
 
@@ -101,24 +101,17 @@ def get_font_path(weight: str = "Regular") -> str:
     if hira and _is_valid_font(hira):
         return hira
 
-    # 2. ダウンロード済み Noto
-    noto_path = NOTO_FONT_PATHS.get(weight)
-    if noto_path and _is_valid_font(str(noto_path)):
-        return str(noto_path)
-
-    # 3. ダウンロードを試みる
-    global _download_attempted
-    if not _download_attempted:
-        ensure_fonts()
-        if noto_path and _is_valid_font(str(noto_path)):
-            return str(noto_path)
-
-    # 4. BIZ UDGothic（リポジトリ内 TTF、Linux 含む全環境で利用可能）
+    # 2. BIZ UDGothic（リポジトリ内 TTF、Linux 含む全環境で利用可能）
     biz_path = BIZ_FONT_PATHS.get(weight)
     if biz_path and _is_valid_font(str(biz_path)):
         return str(biz_path)
 
-    # 5. weight を下げてフォールバック
+    # 3. ダウンロード済み Noto（BIZ UD もない場合の最終手段）
+    noto_path = NOTO_FONT_PATHS.get(weight)
+    if noto_path and _is_valid_font(str(noto_path)):
+        return str(noto_path)
+
+    # 4. weight を下げてフォールバック
     for fallback in ["Bold", "Regular"]:
         if fallback == weight:
             continue
@@ -132,12 +125,16 @@ def get_font_path(weight: str = "Regular") -> str:
 def ensure_fonts(progress_callback=None) -> bool:
     """
     フォントが利用可能か確認し、なければダウンロードする。
-    macOS ヒラギノがあれば追加DLは不要。
+    macOS ヒラギノまたは BIZ UDGothic（リポジトリ内）があれば追加DLは不要。
     """
     global _download_attempted
 
     # macOS ヒラギノがすべて揃っていればOK
     if all(_hiragino_path(w) for w in ["Regular", "Bold"]):
+        return True
+
+    # BIZ UDGothic がリポジトリ内に揃っていれば Noto DL 不要
+    if all(_is_valid_font(str(BIZ_FONT_PATHS.get(w, Path("/nonexistent")))) for w in ["Regular", "Bold"]):
         return True
 
     # Noto ダウンロード（一度だけ試みる）
