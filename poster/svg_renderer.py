@@ -220,6 +220,7 @@ class SVGCanvas:
         color: tuple,
         transform: str = "",
         font_weight: str = "",
+        text_anchor: str = "",
     ):
         if not content:
             return
@@ -233,6 +234,8 @@ class SVGCanvas:
             f'fill="{_hex(color)}" '
             f'xml:space="preserve"'
         )
+        if text_anchor:
+            attrs += f' text-anchor="{text_anchor}"'
         if transform:
             attrs += f' transform="{transform}"'
         self._parts.append(f'<text {attrs}>{_esc(content)}</text>')
@@ -450,6 +453,15 @@ def _embed_image_opaque(img: Image.Image) -> bytes:
     return buf.getvalue()
 
 
+def _embed_image_alpha(img: Image.Image) -> bytes:
+    """RGBA 画像の透明度を維持した PNG バイト列を返す。"""
+    if img.mode != "RGBA":
+        img = img.convert("RGBA")
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
 # ---------------------------------------------------------------------------
 # メイン描画関数
 # ---------------------------------------------------------------------------
@@ -600,16 +612,19 @@ def render_poster_svg(data: PosterData) -> str:
     c.line(venue_x, line_y, venue_x + venue_w, line_y, DARK_BROWN, 1.0)
     cur_y += (line_y + 2.0 - cur_y) + ph(0.018)
 
-    # ハイブリッド開催
+    # ハイブリッド開催（左カラム中央揃え）
     zoom_fs = max(10.0, ph(FS_VENUE_SM) * 1.8)
-    zoom_indent = max(5.0, zoom_fs * 0.6)
     zoom_text = "ハイブリッド開催"
     zoom_asc, _, zoom_ch = _fm(_RL_GOTHIC, zoom_fs)
+    zoom_center = lc_x + lc_w / 2
     zoom_baseline = cur_y + zoom_asc
-    _draw_text_at_baseline(c, zoom_text, lc_x + zoom_indent, zoom_baseline, _SVG_GOTHIC, zoom_fs, DARK_BROWN)
-    zoom_tw = _tw(zoom_text, _RL_GOTHIC, zoom_fs)
+    # text-anchor="middle" で中央揃え（フォントメトリクス差の影響なし）
+    c.text(zoom_text, zoom_center, zoom_baseline, _SVG_GOTHIC, zoom_fs, DARK_BROWN, text_anchor="middle")
+    # 下線幅: 全角文字は Hiragino で 1em/char = zoom_fs × 文字数
+    zoom_line_w = len(zoom_text) * zoom_fs
     zoom_line_y = cur_y + zoom_ch + 2.0
-    c.line(lc_x + zoom_indent, zoom_line_y, lc_x + zoom_indent + zoom_tw, zoom_line_y, DARK_BROWN, 2.0)
+    c.line(zoom_center - zoom_line_w / 2, zoom_line_y,
+           zoom_center + zoom_line_w / 2, zoom_line_y, DARK_BROWN, 2.0)
     cur_y += (zoom_line_y + 2.0 - cur_y) + ph(0.022)
 
     # 日付・時刻
@@ -794,14 +809,14 @@ def render_poster_svg(data: PosterData) -> str:
             cap_y + cap_h + cap_gap + cap2_asc, _SVG_GOTHIC, cap2_fs, DARK_BROWN
         )
 
-    # 参加費無料
+    # 参加費無料（sect ストリップの右横・年度テキスト中央の高さ）
     free_fs = ph(FS_SANSHUUHI)
     free_text = "参加費無料"
-    free_tw = _tw(free_text, _RL_GOTHIC, free_fs)
-    free_x = prog_x + prog_w - free_tw - pw(0.012)
-    free_y = header_bottom + ph(0.018)
-    free_asc, _, _ = _fm(_RL_GOTHIC, free_fs)
-    _draw_text_at_baseline(c, free_text, free_x, free_y + free_asc, _SVG_GOTHIC, free_fs, (220, 30, 30))
+    free_asc, _, free_ch = _fm(_RL_GOTHIC, free_fs)
+    year_mid_y = header_bottom + v_pad + (prog_top_y - header_bottom - v_pad) / 2
+    free_baseline = year_mid_y - free_ch / 2 + free_asc
+    free_x = sect_x + sect_w + pw(0.012)
+    _draw_text_at_baseline(c, free_text, free_x, free_baseline, _SVG_GOTHIC, free_fs, (220, 30, 30))
 
     # プログラムレイアウト
     layout = LayoutEngine(data, render_scale=1.0).compute()
@@ -884,36 +899,39 @@ def render_poster_svg(data: PosterData) -> str:
         step = ch + 2.0
         start_top = by2 + max(4.0, (box_h - step * len(display)) / 2)
         cur_top = start_top
+        cx = bx + bw / 2  # ボックス中央（text-anchor="middle" で正確に中央揃え）
         for chv in display:
-            lw = _tw(chv, _RL_GOTHIC, fs)
-            cx = bx + (bw - lw) / 2
             if cur_top + ch <= by2 + box_h:
-                _draw_text_at_baseline(c, chv, cx, cur_top + asc, _SVG_GOTHIC, fs, DARK_BROWN)
+                c.text(chv, cx, cur_top + asc, _SVG_GOTHIC, fs, DARK_BROWN, text_anchor="middle")
             cur_top += step
 
-    # 装飾イラスト
+    # 装飾イラスト（参加費無料の右側〜ページ右端まで右寄せ配置）
     deco_imgs = getattr(data, "decorative_images", [])
     if deco_imgs:
-        illust_size = lc_w * 0.65
-        positions_list = [
-            (lc_x + lc_w * 0.0, H * 0.60),
-            (lc_x + lc_w * 0.35, H * 0.68),
-        ]
-        for i, img_path in enumerate(deco_imgs[:2]):
-            if i < len(positions_list):
-                px, py = positions_list[i]
-                try:
-                    p = Path(img_path)
-                    if not p.exists():
-                        continue
-                    img = Image.open(p).convert("RGBA")
-                    iw, ih = img.size
-                    aspect = iw / ih
-                    dw = illust_size if aspect >= 1 else illust_size * aspect
-                    dh = illust_size / aspect if aspect >= 1 else illust_size
-                    img.thumbnail((int(dw * 5), int(dh * 5)), Image.LANCZOS)
-                    c.image(_embed_image_opaque(img), px, py, dw, dh)
-                except Exception as e:
-                    print(f"装飾画像SVG埋め込みエラー: {e}")
+        deco_area_h = prog_top_y - header_bottom - ph(0.015)
+        deco_margin = pw(0.010)
+        # 参加費無料テキスト右端を起点に、ページ右端まで使って右寄せ
+        free_right = free_x + _tw(free_text, _RL_GOTHIC, free_fs)
+        avail_w = W - free_right - deco_margin * 2
+        illust_size = min(deco_area_h * 0.88, max(0.0, avail_w))
+        total_deco_w = illust_size
+        deco_start_x = W - illust_size - deco_margin
+        deco_y = header_bottom + (deco_area_h - illust_size) / 2 + ph(0.008)
+        for i, img_path in enumerate(deco_imgs[:1]):
+            try:
+                p = Path(img_path)
+                if not p.exists():
+                    continue
+                img = Image.open(p).convert("RGBA")
+                iw, ih = img.size
+                aspect = iw / ih
+                dw = illust_size if aspect >= 1 else illust_size * aspect
+                dh = illust_size / aspect if aspect >= 1 else illust_size
+                img.thumbnail((int(dw * 5), int(dh * 5)), Image.LANCZOS)
+                dx = deco_start_x
+                dy = deco_y + (illust_size - dh) / 2
+                c.image(_embed_image_alpha(img), dx, dy, dw, dh)
+            except Exception as e:
+                print(f"装飾画像SVG埋め込みエラー: {e}")
 
     return c.to_svg()

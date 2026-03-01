@@ -63,7 +63,7 @@ st.markdown("---")
 
 _SAVE_KEYS = [
     "year", "session_num", "theme_key", "custom_accent",
-    "event_date", "time_range",
+    "event_date", "event_date_iso", "time_range",
     "venue_room", "venue_building", "venue_address",
     "registration_url", "zoom_note",
     "has_mc", "mc_affiliation", "mc_name",
@@ -100,6 +100,13 @@ def _import_state(data: bytes):
             if val not in THEMES:
                 val = "spring_sakura"
         st.session_state[k] = val
+    # event_date_iso から date ウィジェット用の raw 値を復元
+    iso = st.session_state.get("event_date_iso", "")
+    if iso:
+        try:
+            st.session_state["_event_date_raw"] = date.fromisoformat(iso)
+        except Exception:
+            pass
 
 
 # ─── サイドバー：ステップナビゲーション ──────────────────────────────────
@@ -158,6 +165,8 @@ def init_state():
         "theme_key": "spring_sakura",
         "custom_accent": "#D26E96",
         "event_date": "",
+        "event_date_iso": "",
+        "_event_date_raw": date.today(),
         "time_range": "19:00 - 20:30",
         "venue_room": "5F 小会議室1",
         "venue_building": "じゅうろくプラザ",
@@ -367,13 +376,14 @@ elif step == "2. 開催日時・会場":
 
     col1, col2 = st.columns(2)
     with col1:
-        date_val = st.date_input("開催日", value=date.today())
+        date_val = st.date_input("開催日", key="_event_date_raw")
         # 曜日を日本語で生成
         weekdays = ["月", "火", "水", "木", "金", "土", "日"]
         wd = weekdays[date_val.weekday()]
         auto_date = f"{date_val.year}年 {date_val.month}月{date_val.day}日({wd})"
         st.caption(f"ポスター表示形式: **{auto_date}**")
         st.session_state["event_date"] = auto_date
+        st.session_state["event_date_iso"] = date_val.isoformat()
 
         st.session_state["time_range"] = st.text_input(
             "時間帯",
@@ -602,7 +612,7 @@ elif step == "7. イラスト & 出力":
             value=st.session_state["bg_opacity"], step=5
         )
 
-        st.subheader("装飾イラスト（最大2つ）")
+        st.subheader("装飾イラスト")
         preset_decos = list_assets(DECO_DIR)
         uploaded_decos = []
         if preset_decos:
