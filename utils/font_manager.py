@@ -13,6 +13,14 @@ from pathlib import Path
 # プロジェクト内フォントディレクトリ（Noto DL先）
 FONT_DIR = Path(__file__).parent.parent / "assets" / "fonts" / "NotoSansJP"
 
+# BIZ UDGothic（リポジトリ内 TTF、Linux 含む全環境で利用可能）
+_BIZ_FONT_DIR = Path(__file__).parent.parent / "assets" / "fonts" / "BIZUDGothic"
+BIZ_FONT_PATHS = {
+    "Regular": _BIZ_FONT_DIR / "BIZUDGothic-Regular.ttf",
+    "Bold":    _BIZ_FONT_DIR / "BIZUDGothic-Bold.ttf",
+    "Black":   _BIZ_FONT_DIR / "BIZUDGothic-Bold.ttf",  # Black → Bold でフォールバック
+}
+
 # macOS ヒラギノ角ゴシック (システムフォント)
 # W3 ≈ Regular, W6 ≈ Bold, W8/W9 ≈ Black
 HIRAGINO_FONTS = {
@@ -105,7 +113,12 @@ def get_font_path(weight: str = "Regular") -> str:
         if noto_path and _is_valid_font(str(noto_path)):
             return str(noto_path)
 
-    # 4. weight を下げてフォールバック
+    # 4. BIZ UDGothic（リポジトリ内 TTF、Linux 含む全環境で利用可能）
+    biz_path = BIZ_FONT_PATHS.get(weight)
+    if biz_path and _is_valid_font(str(biz_path)):
+        return str(biz_path)
+
+    # 5. weight を下げてフォールバック
     for fallback in ["Bold", "Regular"]:
         if fallback == weight:
             continue

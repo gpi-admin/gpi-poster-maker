@@ -394,23 +394,6 @@ if step == "1. 基本情報・テーマ":
                 value=st.session_state["custom_accent"]
             )
 
-        from poster.svg_renderer import SVG_FONT_PRESETS, SVG_FONT_DEFAULT
-        _FONT_LABELS = {
-            "hiragino": "ヒラギノ（macOS 推奨）",
-            "biz_ud":   "BIZ UDGothic（全環境対応・クラウド推奨）",
-        }
-        font_keys = list(SVG_FONT_PRESETS.keys())
-        current_font = st.session_state.get("svg_font_key", SVG_FONT_DEFAULT)
-        if current_font not in font_keys:
-            current_font = SVG_FONT_DEFAULT
-        st.session_state["svg_font_key"] = st.selectbox(
-            "フォント",
-            options=font_keys,
-            format_func=lambda k: _FONT_LABELS.get(k, k),
-            index=font_keys.index(current_font),
-            help="Streamlit Cloud など macOS 以外の環境では「BIZ UDGothic」を選択してください",
-        )
-
     st.markdown("---")
     st.subheader("現在の設定")
     st.write(f"**{st.session_state['year']}年度　第{st.session_state['session_num']}回**　岐阜県小児科研修セミナー")
@@ -680,6 +663,24 @@ elif step == "7. イラスト & 出力":
             type=["png", "jpg", "jpeg"],
             accept_multiple_files=True,
             key="deco_upload"
+        )
+
+        st.subheader("SVGフォント")
+        from poster.svg_renderer import SVG_FONT_PRESETS, SVG_FONT_DEFAULT
+        _FONT_LABELS = {
+            "hiragino": "ヒラギノ（macOS 専用）",
+            "biz_ud":   "BIZ UDGothic（全環境対応・クラウド推奨）",
+        }
+        font_keys = list(SVG_FONT_PRESETS.keys())
+        current_font = st.session_state.get("svg_font_key", SVG_FONT_DEFAULT)
+        if current_font not in font_keys:
+            current_font = SVG_FONT_DEFAULT
+        st.session_state["svg_font_key"] = st.selectbox(
+            "フォント",
+            options=font_keys,
+            format_func=lambda k: _FONT_LABELS.get(k, k),
+            index=font_keys.index(current_font),
+            help="Streamlit Cloud など macOS 以外の環境では「BIZ UDGothic」を選択してください",
         )
 
     with col_right:
