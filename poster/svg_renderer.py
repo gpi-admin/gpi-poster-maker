@@ -95,6 +95,9 @@ class SVGFontConfig:
     # 空文字のときは gothic_family / mincho_family をそのまま使用
     system_gothic_family: str = ""
     system_mincho_family: str = ""
+    # True = Bold Mincho あり（Hiragino Mincho ProN W6 等）
+    # False = Bold Mincho なし → font-weight を 400 に抑制（BIZ UDMincho 等）
+    mincho_has_bold: bool = True
 
 
 # 起動時に BIZ UD フォントを base64 でプリロード（@font-face 埋め込み用）
@@ -128,6 +131,7 @@ SVG_FONT_PRESETS: dict[str, SVGFontConfig] = {
         mincho_regular_path=_BIZ_FONT_DIR / "BIZUDMincho-Regular.ttf",
         system_gothic_family="BIZ UDGothic",   # fontconfig での実際のファミリー名
         system_mincho_family="BIZ UDMincho",
+        mincho_has_bold=False,  # BIZ UDMincho Bold が存在しないため
     ),
 }
 SVG_FONT_DEFAULT = "hiragino"
@@ -233,6 +237,7 @@ class SVGCanvas:
         fc = font_config or SVG_FONT_PRESETS[SVG_FONT_DEFAULT]
         self.gothic = fc.gothic_family
         self.mincho = fc.mincho_family
+        self._mincho_has_bold = fc.mincho_has_bold
         self._font_config = fc
 
     def rect(
@@ -284,9 +289,17 @@ class SVGCanvas:
     ):
         if not content:
             return
-        # font_weight 未指定時: ゴシック・明朝ともに W6(600)
+        # font_weight 未指定時:
+        # ゴシック → W6(600)
+        # 明朝 → Bold が存在するフォント(Hiragino等)なら 600、なければ 400
+        # BIZ UDMincho は Bold バリアントが存在しないため 600 を要求すると
+        # macOS CoreText が別フォント（Hiragino Mincho等）にフォールバックして
+        # Linux/FreeType と異なる表示になる。
         if not font_weight:
-            font_weight = "600"
+            if svg_font == self.mincho and not self._mincho_has_bold:
+                font_weight = "400"
+            else:
+                font_weight = "600"
         attrs = (
             f'x="{x:.3f}" y="{baseline_y:.3f}" '
             f'font-family="{_esc(svg_font)}" font-size="{size:.3f}" '
