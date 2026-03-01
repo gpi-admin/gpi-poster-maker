@@ -44,14 +44,13 @@ def _hiragino_available() -> bool:
 
 @st.cache_resource
 def _install_biz_fonts_for_cairosvg() -> bool:
-    """Linux環境でBIZ UDフォントをユーザーフォントディレクトリにインストールしfc-cacheを更新。
-    cairosvg がフォント名 'BIZUDGothic' でシステムフォントを検索できるようにする。
-    macOSでは不要なため何もしない。成功したか否かを返す。
+    """BIZ UDフォントをユーザーフォントディレクトリにインストールしfc-cacheを更新。
+    cairosvg がシステムフォント名 'BIZ UDGothic' / 'BIZ UDMincho' で検索できるようにする。
+    @font-face data URI は cairosvg で Mincho が正しくレンダリングされないため、
+    macOS・Linux 両環境でシステムフォントインストール方式を使用する。
     """
     import shutil
     import subprocess
-    if _hiragino_available():
-        return True  # macOS: Hiragino が使えるので不要
     biz_dir = Path(__file__).parent / "assets" / "fonts" / "BIZUDGothic"
     font_dir = Path.home() / ".local" / "share" / "fonts"
     font_dir.mkdir(parents=True, exist_ok=True)
@@ -734,18 +733,27 @@ elif step == "7. イラスト & 出力":
                         font_key=user_font_key,
                     )
                     # cairosvg レンダリング用 SVG 決定:
-                    # macOS（ヒラギノあり）→ ユーザー選択フォントをそのまま使用
-                    # Linux（ヒラギノなし）→ BIZ UD をシステムフォントにインストールして使用
-                    #   @font-face 埋め込みなし（systemフォントに頼ることでcairosvg互換性↑）
-                    if _hiragino_available():
-                        svg_bytes = svg_str.encode("utf-8")
-                    else:
+                    # ヒラギノ選択時 → SVGそのまま（cairosvgはmacOSシステムフォントを参照）
+                    # BIZ UD 選択時 → @font-face data URI は Mincho が cairosvg で
+                    #   正しくレンダリングされないため、常にシステムフォントインストール方式を使用
+                    if user_font_key == "biz_ud":
                         _install_biz_fonts_for_cairosvg()
                         svg_bytes = svg_mod.render_poster_svg(
                             poster_data,
                             font_key="biz_ud",
                             embed_fonts=False,
                         ).encode("utf-8")
+                    elif not _hiragino_available():
+                        # Linux でヒラギノ以外のフォントが選択されている場合も BIZ UD にフォールバック
+                        _install_biz_fonts_for_cairosvg()
+                        svg_bytes = svg_mod.render_poster_svg(
+                            poster_data,
+                            font_key="biz_ud",
+                            embed_fonts=False,
+                        ).encode("utf-8")
+                    else:
+                        # macOS でヒラギノ選択 → システムフォントをそのまま使用
+                        svg_bytes = svg_str.encode("utf-8")
 
                     # プレビュー用 PNG（scale=2）
                     preview_png = cairosvg.svg2png(bytestring=svg_bytes, scale=2)
