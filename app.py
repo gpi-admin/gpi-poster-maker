@@ -481,12 +481,6 @@ elif step == "3. Zoom / QR コード":
         placeholder="https://us02web.zoom.us/meeting/register/..."
     )
 
-    st.session_state["zoom_note"] = st.text_input(
-        "Zoom 補足テキスト",
-        value=st.session_state["zoom_note"],
-        help="例: &zoomミーティング（ハンズオンもzoom配信します）"
-    )
-
     if st.session_state["registration_url"]:
         st.subheader("QRコードプレビュー")
         from poster.qr_generator import generate_qr
