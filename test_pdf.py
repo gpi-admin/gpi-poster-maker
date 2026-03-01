@@ -77,7 +77,7 @@ data = PosterData(
             ],
         ),
     ],
-    contact_email="gpi.jimu@gmail.com",
+    contact_email="gpi.office.med@gmail.com",
     bg_opacity=0.30,
 )
 

@@ -10,6 +10,7 @@ from poster.text_utils import (
 )
 from utils.font_manager import get_pillow_font, get_pillow_font_mincho
 from themes.color_themes import DARK_BROWN, WHITE, LIGHT_CREAM_BG
+from poster.layout import FOOTER_GROUP_SCALE
 
 # ─── 共通ユーティリティ ────────────────────────────────────────────────────
 
@@ -63,14 +64,33 @@ def draw_header_bar(canvas: Image.Image, draw: ImageDraw.ImageDraw,
 
 def draw_footer_bar(canvas: Image.Image, draw: ImageDraw.ImageDraw,
                     y: int, h: int, email: str, theme: dict = None):
-    """下部お問い合わせ先フッター（テーマカラー背景）"""
+    """下部お問い合わせ先フッター（テーマカラー背景）。「岐阜県小児科研修支援グループ」のみ少し大きく描画。"""
     W = canvas.width
     bar_color = theme.get("title_bar", DARK_BROWN) if theme else DARK_BROWN
     draw.rectangle([0, y, W, y + h], fill=bar_color)
-    font = get_pillow_font("Regular", max(8, int(h * 0.40)))
-    text = f"お問い合わせ先  岐阜県小児科研修支援グループ  Mail ▶  {email}"
-    tw, th = get_text_size(draw, text, font)
-    draw.text(((W - tw) // 2, y + (h - th) // 2), text, fill=WHITE, font=font)
+    base_fs = max(8, int(h * 0.40))
+    large_fs = max(8, int(h * 0.40 * FOOTER_GROUP_SCALE))
+    font_small = get_pillow_font("Regular", base_fs)
+    font_large = get_pillow_font("Regular", large_fs)
+    before = "お問い合わせ先  "
+    group = "岐阜県小児科研修支援グループ"
+    after = f"  Mail ▶  {email}"
+    w1, th1 = get_text_size(draw, before, font_small)
+    w2, th2 = get_text_size(draw, group, font_large)
+    w3, th3 = get_text_size(draw, after, font_small)
+    total_w = w1 + w2 + w3
+    cur_x = (W - total_w) // 2
+    # ベースラインを小フォントで中央に合わせる
+    bbox_s = font_small.getbbox("あ")
+    bbox_l = font_large.getbbox(group)
+    asc_small = -bbox_s[1]
+    asc_large = -bbox_l[1]
+    baseline_y = y + (h - (bbox_s[3] - bbox_s[1])) // 2 + asc_small
+    draw.text((cur_x, baseline_y - asc_small), before, fill=WHITE, font=font_small)
+    cur_x += w1
+    draw.text((cur_x, baseline_y - asc_large), group, fill=WHITE, font=font_large)
+    cur_x += w2
+    draw.text((cur_x, baseline_y - asc_small), after, fill=WHITE, font=font_small)
 
 
 # ─── 中央縦バー ────────────────────────────────────────────────────────────

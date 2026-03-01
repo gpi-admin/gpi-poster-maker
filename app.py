@@ -225,7 +225,7 @@ def init_state():
         "bg_opacity": 35,
         "selected_bg": "",
         "selected_decos": [],
-        "contact_email": "gpi.jimu@gmail.com",
+        "contact_email": "gpi.office.med@gmail.com",
     }
     for k, v in defaults.items():
         if k not in st.session_state:

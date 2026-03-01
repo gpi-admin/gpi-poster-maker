@@ -62,7 +62,7 @@ class PosterData:
     sections: List[Section] = field(default_factory=list)
 
     # 連絡先
-    contact_email: str = "gpi.jimu@gmail.com"
+    contact_email: str = "gpi.office.med@gmail.com"
 
     # ビジュアル設定
     bg_opacity: float = 0.35

@@ -29,6 +29,7 @@ from poster.layout import (
     HEADER_H,
     HEADER_TOP,
     FOOTER_H,
+    FOOTER_GROUP_SCALE,
     LEFT_W,
     TITLE_X,
     TITLE_W,
@@ -634,13 +635,22 @@ def render_poster_svg(
         header_font_size, WHITE,
     )
 
-    # フッターテキスト
+    # フッターテキスト（「岐阜県小児科研修支援グループ」のみ少し大きく）
     footer_font_size = max(6.0, footer_h * 0.40)
-    footer_text = f"お問い合わせ先  岐阜県小児科研修支援グループ  Mail ▶  {data.contact_email}"
+    footer_fs_large = footer_font_size * FOOTER_GROUP_SCALE
+    before = "お問い合わせ先  "
+    group = "岐阜県小児科研修支援グループ"
+    after = f"  Mail ▶  {data.contact_email}"
+    w1 = _tw(before, _RL_GOTHIC, footer_font_size)
+    w2 = _tw(group, _RL_GOTHIC, footer_fs_large)
+    w3 = _tw(after, _RL_GOTHIC, footer_font_size)
+    footer_w = w1 + w2 + w3
     footer_asc, _, footer_ch = _fm(_RL_GOTHIC, footer_font_size)
     footer_baseline = footer_top + (footer_h - footer_ch) / 2 + footer_asc
-    footer_x = (W - _tw(footer_text, _RL_GOTHIC, footer_font_size)) / 2
-    _draw_text_at_baseline(c, footer_text, footer_x, footer_baseline, _SVG_GOTHIC, footer_font_size, WHITE)
+    footer_x = (W - footer_w) / 2
+    _draw_text_at_baseline(c, before, footer_x, footer_baseline, _SVG_GOTHIC, footer_font_size, WHITE)
+    _draw_text_at_baseline(c, group, footer_x + w1, footer_baseline, _SVG_GOTHIC, footer_fs_large, WHITE)
+    _draw_text_at_baseline(c, after, footer_x + w1 + w2, footer_baseline, _SVG_GOTHIC, footer_font_size, WHITE)
 
     # 各カラム基本位置
     lc_x = pw(LC_PAD_L)

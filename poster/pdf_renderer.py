@@ -26,6 +26,7 @@ from poster.layout import (
     HEADER_H,
     HEADER_TOP,
     FOOTER_H,
+    FOOTER_GROUP_SCALE,
     LEFT_W,
     TITLE_X,
     TITLE_W,
@@ -459,19 +460,20 @@ def render_poster_pdf(data: PosterData) -> bytes:
     )
 
     footer_font_size = max(6.0, footer_h * 0.40)
-    footer_text = f"お問い合わせ先  岐阜県小児科研修支援グループ  Mail ▶  {data.contact_email}"
-    footer_w = _text_width(footer_text, _FONT_REG, footer_font_size)
+    footer_fs_large = footer_font_size * FOOTER_GROUP_SCALE
+    before = "お問い合わせ先  "
+    group = "岐阜県小児科研修支援グループ"
+    after = f"  Mail ▶  {data.contact_email}"
+    w1 = _text_width(before, _FONT_REG, footer_font_size)
+    w2 = _text_width(group, _FONT_REG, footer_fs_large)
+    w3 = _text_width(after, _FONT_REG, footer_font_size)
+    footer_w = w1 + w2 + w3
     footer_asc, _, footer_ch = _font_metrics(_FONT_REG, footer_font_size)
     footer_baseline = PDF_H - (footer_top + (footer_h - footer_ch) / 2 + footer_asc)
-    _draw_text_raw(
-        c,
-        footer_text,
-        (PDF_W - footer_w) / 2,
-        footer_baseline,
-        _FONT_REG,
-        footer_font_size,
-        WHITE,
-    )
+    footer_x = (PDF_W - footer_w) / 2
+    _draw_text_raw(c, before, footer_x, footer_baseline, _FONT_REG, footer_font_size, WHITE)
+    _draw_text_raw(c, group, footer_x + w1, footer_baseline, _FONT_REG, footer_fs_large, WHITE)
+    _draw_text_raw(c, after, footer_x + w1 + w2, footer_baseline, _FONT_REG, footer_font_size, WHITE)
 
     # 左・中央・右の基本位置
     lc_x = pw(LC_PAD_L)
