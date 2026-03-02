@@ -308,22 +308,24 @@ def _build_poster_data(uploaded_bg=None, uploaded_decos_files=None) -> PosterDat
         if candidate.exists():
             bg_path = str(candidate)
 
-    # 装飾イラスト
+    # 装飾イラスト（背景と同様に: テンプレート or カスタムアップロード）
     deco_paths = []
-    for d in ss.get("selected_decos", [])[:2]:
-        p = DECO_DIR / d
-        if p.exists():
-            deco_paths.append(str(p))
-    if deco_custom_enabled and uploaded_decos_files:
-        upload_dir = _get_session_upload_dir()
-        for i, f in enumerate(uploaded_decos_files[:2]):
-            p = upload_dir / f"deco_{i}.png"
+    if deco_custom_enabled:
+        if uploaded_decos_files:
+            upload_dir = _get_session_upload_dir()
+            f = uploaded_decos_files[0]
+            p = upload_dir / "deco_0.png"
             p.write_bytes(f.getvalue())
             deco_paths.append(str(p))
-    elif deco_custom_enabled and ss.get("_uploaded_deco_paths"):
-        for path in ss["_uploaded_deco_paths"]:
+        elif ss.get("_uploaded_deco_paths"):
+            path = ss["_uploaded_deco_paths"][0]
             if Path(path).exists():
                 deco_paths.append(path)
+    else:
+        for d in ss.get("selected_decos", [])[:1]:
+            p = DECO_DIR / d
+            if p.exists():
+                deco_paths.append(str(p))
 
     # 司会・座長
     mc = None
@@ -635,6 +637,8 @@ elif step == "7. イラスト & 出力":
     st.header("Step 7　イラスト & ポスター出力")
 
     col_left, col_right = st.columns([1, 1])
+    uploaded_bg = None
+    uploaded_decos_files = None
 
     with col_left:
         st.subheader("背景イラスト")
@@ -671,22 +675,21 @@ elif step == "7. イラスト & 出力":
                 st.info("assets/illustrations/backgrounds/ に画像を追加してください")
                 st.session_state["selected_bg"] = ""
 
-        # file_uploader は常に描画することで、ステップ切り替え時もウィジェット状態が維持される
-        uploaded_bg = st.file_uploader(
-            "背景画像 (PNG / JPG)", type=["png", "jpg", "jpeg"],
-            key="bg_upload",
-            label_visibility="collapsed" if not use_custom_bg else "visible",
-        )
-        if uploaded_bg is not None:
-            # アップロード直後にテンポラリファイルへ書き出してパスを保存
-            tmp = _get_session_upload_dir() / "bg_upload.png"
-            tmp.write_bytes(uploaded_bg.getvalue())
-            st.session_state["_uploaded_bg_path"] = str(tmp)
-            st.session_state["_uploaded_bg_name"] = uploaded_bg.name
         if prev_use_custom_bg and not use_custom_bg:
             # ユーザーが明示的にチェックを外した時のみ保存済みパスをクリア
             st.session_state.pop("_uploaded_bg_path", None)
             st.session_state.pop("_uploaded_bg_name", None)
+        if use_custom_bg:
+            uploaded_bg = st.file_uploader(
+                "背景画像 (PNG / JPG)", type=["png", "jpg", "jpeg"],
+                key="bg_upload",
+            )
+            if uploaded_bg is not None:
+                # アップロード直後にテンポラリファイルへ書き出してパスを保存
+                tmp = _get_session_upload_dir() / "bg_upload.png"
+                tmp.write_bytes(uploaded_bg.getvalue())
+                st.session_state["_uploaded_bg_path"] = str(tmp)
+                st.session_state["_uploaded_bg_name"] = uploaded_bg.name
         saved_path = st.session_state.get("_uploaded_bg_path", "")
         if use_custom_bg and saved_path and Path(saved_path).exists():
             st.caption(f"選択済み: {st.session_state.get('_uploaded_bg_name', '画像')}")
@@ -697,17 +700,6 @@ elif step == "7. イラスト & 出力":
         )
 
         st.subheader("装飾イラスト")
-        preset_decos = list_assets(DECO_DIR)
-        if preset_decos:
-            st.session_state["selected_decos"] = st.multiselect(
-                "プリセットから選択",
-                options=preset_decos,
-                default=[d for d in st.session_state["selected_decos"] if d in preset_decos],
-                max_selections=2,
-            )
-        else:
-            st.info("assets/illustrations/decorative/ に画像を追加してください")
-
         prev_use_custom_decos = st.session_state.get(
             "deco_custom_enabled",
             st.session_state.get(
@@ -718,31 +710,46 @@ elif step == "7. イラスト & 出力":
         if "_ui_use_custom_decos" not in st.session_state:
             st.session_state["_ui_use_custom_decos"] = prev_use_custom_decos
         use_custom_decos = st.checkbox(
-            "装飾画像をアップロードする（プリセットに追加）",
+            "装飾画像をアップロードする",
             key="_ui_use_custom_decos",
         )
         st.session_state["deco_custom_enabled"] = use_custom_decos
         st.session_state["use_custom_decos"] = use_custom_decos
-        uploaded_decos_files = st.file_uploader(
-            "画像をアップロード (PNG推奨, 透過対応)",
-            type=["png", "jpg", "jpeg"],
-            accept_multiple_files=True,
-            key="deco_upload",
-            label_visibility="collapsed" if not use_custom_decos else "visible",
-        )
-        if use_custom_decos and uploaded_decos_files:
-            # アップロード直後にテンポラリファイルへ書き出してパスを保存
-            upload_dir = _get_session_upload_dir()
-            saved = []
-            for i, f in enumerate(uploaded_decos_files[:2]):
-                p = upload_dir / f"deco_{i}.png"
-                p.write_bytes(f.getvalue())
-                saved.append((f.name, str(p)))
-            st.session_state["_uploaded_deco_paths"] = [p for _, p in saved]
-            st.session_state["_uploaded_deco_names"] = [n for n, _ in saved]
+
+        preset_decos = list_assets(DECO_DIR)
+        if not use_custom_decos:
+            if preset_decos:
+                opts = ["（装飾なし）"] + preset_decos
+                current = st.session_state.get("selected_decos", [])
+                current_one = current[0] if current and current[0] in preset_decos else "（装飾なし）"
+                selected_deco = st.selectbox(
+                    "テンプレート装飾を選択",
+                    options=opts,
+                    index=opts.index(current_one),
+                )
+                st.session_state["selected_decos"] = [] if selected_deco == "（装飾なし）" else [selected_deco]
+            else:
+                st.info("assets/illustrations/decorative/ にテンプレート画像を追加してください")
+                st.session_state["selected_decos"] = []
+
         if prev_use_custom_decos and not use_custom_decos:
             st.session_state.pop("_uploaded_deco_paths", None)
             st.session_state.pop("_uploaded_deco_names", None)
+        if use_custom_decos:
+            uploaded_deco = st.file_uploader(
+                "画像をアップロード (PNG推奨, 透過対応)",
+                type=["png", "jpg", "jpeg"],
+                accept_multiple_files=False,
+                key="deco_upload",
+            )
+            if uploaded_deco:
+                # アップロード直後にテンポラリファイルへ書き出してパスを保存
+                upload_dir = _get_session_upload_dir()
+                p = upload_dir / "deco_0.png"
+                p.write_bytes(uploaded_deco.getvalue())
+                st.session_state["_uploaded_deco_paths"] = [str(p)]
+                st.session_state["_uploaded_deco_names"] = [uploaded_deco.name]
+                uploaded_decos_files = [uploaded_deco]
         saved_deco_paths = st.session_state.get("_uploaded_deco_paths", [])
         if use_custom_decos and saved_deco_paths and any(Path(p).exists() for p in saved_deco_paths):
             names = st.session_state.get("_uploaded_deco_names", [])
