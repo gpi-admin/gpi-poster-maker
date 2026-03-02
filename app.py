@@ -17,6 +17,7 @@ from datetime import date
 sys.path.insert(0, str(Path(__file__).parent))
 
 from poster.models import PosterData, Section, ContentItem, PersonInfo
+from poster.email_text import build_announcement_email_text
 from themes.color_themes import THEMES, get_theme, rgb_to_hex, hex_to_rgb
 from utils.font_manager import ensure_fonts
 
@@ -829,6 +830,7 @@ elif step == "7. イラスト & 出力":
                     st.session_state["export_pdf_bytes"] = export_pdf
                     st.session_state["svg_str"] = svg_str
                     st.session_state["poster_data"] = poster_data
+                    st.session_state["email_text"] = build_announcement_email_text(poster_data)
                     st.success("生成完了！")
                 except Exception as e:
                     st.error(f"生成エラー: {e}")
@@ -863,5 +865,25 @@ elif step == "7. イラスト & 出力":
                     data=st.session_state.get("svg_str", "").encode("utf-8"),
                     file_name=f"GPI_{year}_{num:02d}.svg",
                     mime="image/svg+xml",
+                    use_container_width=True,
+                )
+
+            email_text = st.session_state.get("email_text")
+            if not email_text and st.session_state.get("poster_data"):
+                email_text = build_announcement_email_text(st.session_state["poster_data"])
+                st.session_state["email_text"] = email_text
+            if email_text:
+                st.markdown("---")
+                st.subheader("メール周知文（下書き）")
+                st.text_area(
+                    "メール本文",
+                    value=email_text,
+                    height=420,
+                )
+                st.download_button(
+                    label="📥 メール本文TXT",
+                    data=email_text.encode("utf-8"),
+                    file_name=f"GPI_{year}_{num:02d}_mail.txt",
+                    mime="text/plain",
                     use_container_width=True,
                 )
