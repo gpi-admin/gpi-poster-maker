@@ -1,0 +1,13 @@
+theme_key,theme_name_ja,season,priority,recommended_background_motif,recommended_decorative_motif,color_direction,search_keywords_background,search_keywords_decorative,background_orientation,target_background_size,target_deco_size,background_candidates_needed,deco_candidates_needed,background_selected_file,deco_selected_file,status,notes
+spring_sakura,春（桜）,3-4月,A,桜並木 花びら 逆光ボケ,桜 花びら 小枝,淡いピンク クリーム,sakura petals soft pink bokeh spring,transparent sakura petals png,portrait,1588x2246,1200x1200,5,4,,,未着手,中央〜右側の情報量が多すぎない写真を優先
+spring_fresh,春（新緑）,4-5月,A,新緑 木漏れ日 公園,若葉 小花,黄緑 ミント,green leaves sunlight park spring bokeh,transparent green leaves png,portrait,1588x2246,1200x1200,5,4,,,未着手,文字可読性のため暗部が強すぎる素材は避ける
+early_summer_wisteria,初夏（藤）,5月,B,藤棚 紫の花房,藤 花房 蔓,藤色 白,wisteria garden purple flowers soft light,transparent wisteria flower png,portrait,1588x2246,1200x1200,4,3,,,未着手,紫が強すぎる場合は明るめに補正前提
+summer_hydrangea,梅雨（紫陽花）,6月,A,紫陽花 雨粒 しっとり,紫陽花 葉 水滴,青紫 ライトブルー,hydrangea rainy season closeup soft,transparent hydrangea png,portrait,1588x2246,1200x1200,5,4,,,未着手,背景のコントラストは中程度を推奨
+summer_ocean,夏（海）,7-8月,A,青い海 砂浜 空,貝殻 波 イルカ,シアン ターコイズ,turquoise ocean beach gentle waves,transparent shell wave icon png,portrait,1588x2246,1200x1200,5,4,,,未着手,水平線が強く出る素材は上部明るめを優先
+summer_night,夏夜（星空）,8月,B,夜空 星 天の川,星 月 きらめき,ネイビー ブルー,night sky stars milky way soft,transparent stars sparkle png,portrait,1588x2246,1200x1200,4,4,,,未着手,暗すぎる場合は文字背面だけ軽く明度上げ
+early_autumn_cosmos,初秋（コスモス）,9月,B,コスモス畑 風景,コスモス 花びら,ピンク ベージュ,cosmos field pastel pink autumn,transparent cosmos flower png,portrait,1588x2246,1200x1200,4,3,,,未着手,被写界深度浅めの柔らかい写真が相性良
+autumn_leaves,秋（紅葉）,10-11月,A,紅葉 木漏れ日 暖色,もみじ 葉,オレンジ 赤 金,autumn maple bokeh warm,transparent maple leaves png,portrait,1588x2246,1200x1200,5,4,,,未着手,赤が飽和しすぎる素材は避ける
+autumn_ginkgo,秋（銀杏）,11月,B,銀杏並木 黄色の落葉,銀杏 葉,イエロー クリーム,ginkgo avenue yellow leaves,transparent ginkgo leaf png,portrait,1588x2246,1200x1200,4,3,,,未着手,黄色の単調化を避けるため少し緑が残るものも可
+winter_snow,冬（雪景色）,12-1月,A,雪原 雪木 曇天,雪 結晶 霜,白 青灰,snow landscape soft blue white,transparent snowflake png,portrait,1588x2246,1200x1200,5,4,,,未着手,白飛びしすぎない素材を優先
+winter_christmas,冬（クリスマス）,12月,B,常緑樹 イルミネーション,オーナメント 星,深緑 赤 金,christmas evergreen lights bokeh,transparent ornament star png,portrait,1588x2246,1200x1200,4,4,,,未着手,彩度が高すぎる場合は全体を少し落とす
+new_year_sunrise,新春（初日の出）,1-2月,A,朝焼け 日の出 雲海,太陽 光 芒,オレンジ 金,new year sunrise golden sky clouds,transparent sun rays png,portrait,1588x2246,1200x1200,5,3,,,未着手,ヘッダー文字と重なる位置の輝度に注意
