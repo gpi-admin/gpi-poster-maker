@@ -304,14 +304,15 @@ class SVGCanvas:
     ):
         if not content:
             return
+        synth_bold_mincho = (svg_font == self.mincho and not self._mincho_has_bold)
         # font_weight 未指定時:
         # ゴシック → Bold(700)
         # 明朝 → Bold が存在するフォント(Hiragino等)なら 700、なければ 400
-        # BIZ UDMincho は Bold バリアントが存在しないため 600 を要求すると
+        # BIZ UDMincho は Bold バリアントが存在しないため 700 を要求すると
         # macOS CoreText が別フォント（Hiragino Mincho等）にフォールバックして
         # Linux/FreeType と異なる表示になる。
         if not font_weight:
-            if svg_font == self.mincho and not self._mincho_has_bold:
+            if synth_bold_mincho:
                 font_weight = "400"
             else:
                 font_weight = "700"
@@ -324,6 +325,15 @@ class SVGCanvas:
         )
         if text_anchor:
             attrs += f' text-anchor="{text_anchor}"'
+        if synth_bold_mincho:
+            # BIZ UD Mincho は太字ウェイトがないため、同色ストロークで疑似太字化する。
+            stroke_w = max(0.52, size * 0.04)
+            attrs += (
+                f' stroke="{_hex(color)}" '
+                f'stroke-width="{stroke_w:.3f}" '
+                'paint-order="stroke fill" '
+                'stroke-linejoin="round"'
+            )
         if transform:
             attrs += f' transform="{transform}"'
         self._parts.append(f'<text {attrs}>{_esc(content)}</text>')

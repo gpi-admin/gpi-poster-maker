@@ -318,7 +318,9 @@ force_bold_fonts(enabled=True)  # 太字モードON/OFFを一時切替（既定O
 
 本実装では太字モードが既定でONのため、Pillow描画は `Regular→Bold`, `Bold→Black` に自動昇格する。
 PDFは基本的に通常のテキスト描画で出力する。  
-ただし縦書きタイトル・年度テキスト（明朝）は可読性確保のため、軽い塗り+ストロークで太めに補正する。
+`BIZ UDMincho` は Bold バリアントがないため、SVG描画では `font-weight="400"` を維持しつつ、
+同色ストローク（`stroke-width = max(0.52, size * 0.04)`）で疑似太字化して
+年度テキスト・縦書きタイトルの太さを確保する。
 
 ---
 
