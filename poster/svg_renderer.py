@@ -20,6 +20,7 @@ from PIL import Image
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
+import poster.layout as _layout
 from poster.layout import (
     LayoutEngine,
     PDF_H,
@@ -59,12 +60,6 @@ from poster.layout import (
     FS_PRES_NAME,
     FS_SANSHUUHI,
     FS_V_TITLE,
-    ZOOM_TEXT_SHIFT_RATIO,
-    ZOOM_ICON_SIZE_SCALE,
-    ZOOM_ICON_RIGHT_PAD,
-    ZOOM_TEXT_ICON_GAP,
-    ZOOM_ICON_LOGO_SCALE,
-    ZOOM_ICON_ROTATE_DEG,
     SECTION_CONTENT_SCALES,
 )
 from poster.models import PosterData
@@ -72,6 +67,14 @@ from poster.qr_generator import generate_qr
 from poster.zoom_icon import build_zoom_icon
 from themes.color_themes import DARK_BROWN, WHITE, get_theme
 from utils.image_utils import make_background_layer
+
+# layout.py が旧版でも起動できるように既定値でフォールバック
+ZOOM_TEXT_SHIFT_RATIO = getattr(_layout, "ZOOM_TEXT_SHIFT_RATIO", 0.060)
+ZOOM_ICON_SIZE_SCALE = getattr(_layout, "ZOOM_ICON_SIZE_SCALE", 1.45)
+ZOOM_ICON_RIGHT_PAD = getattr(_layout, "ZOOM_ICON_RIGHT_PAD", 0.040)
+ZOOM_TEXT_ICON_GAP = getattr(_layout, "ZOOM_TEXT_ICON_GAP", 0.040)
+ZOOM_ICON_LOGO_SCALE = getattr(_layout, "ZOOM_ICON_LOGO_SCALE", 0.80)
+ZOOM_ICON_ROTATE_DEG = getattr(_layout, "ZOOM_ICON_ROTATE_DEG", 8.0)
 
 ASSETS_DIR = Path(__file__).parent.parent / "assets"
 _BIZ_FONT_DIR = ASSETS_DIR / "fonts" / "BIZUDGothic"

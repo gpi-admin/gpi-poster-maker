@@ -10,16 +10,19 @@ from poster.text_utils import (
 )
 from utils.font_manager import get_pillow_font, get_pillow_font_mincho
 from themes.color_themes import DARK_BROWN, WHITE, LIGHT_CREAM_BG
+import poster.layout as _layout
 from poster.layout import (
     FOOTER_GROUP_SCALE,
-    ZOOM_TEXT_SHIFT_RATIO,
-    ZOOM_ICON_SIZE_SCALE,
-    ZOOM_ICON_RIGHT_PAD,
-    ZOOM_TEXT_ICON_GAP,
-    ZOOM_ICON_LOGO_SCALE,
-    ZOOM_ICON_ROTATE_DEG,
 )
 from poster.zoom_icon import build_zoom_icon
+
+# layout.py が旧版でも起動できるように既定値でフォールバック
+ZOOM_TEXT_SHIFT_RATIO = getattr(_layout, "ZOOM_TEXT_SHIFT_RATIO", 0.060)
+ZOOM_ICON_SIZE_SCALE = getattr(_layout, "ZOOM_ICON_SIZE_SCALE", 1.45)
+ZOOM_ICON_RIGHT_PAD = getattr(_layout, "ZOOM_ICON_RIGHT_PAD", 0.040)
+ZOOM_TEXT_ICON_GAP = getattr(_layout, "ZOOM_TEXT_ICON_GAP", 0.040)
+ZOOM_ICON_LOGO_SCALE = getattr(_layout, "ZOOM_ICON_LOGO_SCALE", 0.80)
+ZOOM_ICON_ROTATE_DEG = getattr(_layout, "ZOOM_ICON_ROTATE_DEG", 8.0)
 
 # ─── 共通ユーティリティ ────────────────────────────────────────────────────
 
