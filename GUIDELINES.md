@@ -42,7 +42,7 @@
 | 要素 | 変化の性質 | デフォルト |
 | --- | --- | --- |
 | **会場情報** | 建物名・部屋名・住所。ほぼじゅうろくプラザ 小会議室1/2で固定。たまに変わる | `venue_building`, `venue_room`, `venue_address` で管理 |
-| **Zoom案内** | "&zoomミーティング" テキストはほぼ固定。**Zoomアイコンの配色はテーマに連動して変わる** | `zoom_note` フィールド |
+| **Zoom案内** | "ハイブリッド開催" テキストは固定。**右側に表示する Zoom アイコンは `accent_light`（薄色）+ 白ロゴでテーマ連動** | `zoom_note` フィールド |
 | **開催日時** | 毎回変わる。時刻（19:00-20:30）は基本不変。日付文字幅に合わせ自動フィット必要 | `event_date`, `time_range` |
 | **セミナータイトル** | "20○○年度 第○回岐阜県小児科研修セミナー" — ○の中だけ変わる。位置・色は固定 | `year`, `session_num` から自動生成 |
 | **バッジ色** | 開催時期・背景イラストに合わせてテーマ色を選択。**大バッジ（部・司会・座長・対象）は濃いめ、小バッジ（症例報告等）は薄めの色** | `accent` vs `accent_light` で実装済み |
@@ -83,10 +83,8 @@
 
 ### カテゴリ 5 — 装飾イラスト（空きスペースへの配置）
 
-- 開催時期・背景テーマに合った可愛らしいイラストを 2 点程度配置
-- スペースが余る場合：ビールのイラストを小さく追加（懇親会を示唆）
-- `decorative_images: List[str]` にファイルパスを入れると左カラム下部に貼り付け
-- ビール提案ロジック: `early_summer_green` / `summer_blue` テーマ時に `beer_mugs.png` を `suggested_decoratives` に含む
+- 開催時期・背景テーマに合った可愛らしいイラストを **1 点** 配置
+- `decorative_images: List[str]` の先頭1件のみを左カラム下部に貼り付け
 
 ---
 
@@ -112,6 +110,7 @@ GPI_Poster_Maker/
 ├── poster/
 │   ├── models.py             # PosterData / Section / ContentItem
 │   ├── layout.py             # 正規化座標定数 + LayoutEngine
+│   ├── zoom_icon.py          # テーマ色 + 白ロゴの Zoom アイコン合成
 │   ├── preview_renderer.py   # Pillow プレビュー描画（96 DPI）
 │   ├── pdf_renderer.py       # PDF 出力（ベクター主体・テキスト編集可）
 │   ├── elements_pillow.py    # Pillow 用描画関数（要素単位）
@@ -184,6 +183,14 @@ ReportLab: n * PDF_H     (841.89 pt) または  n * PDF_W     (595.27 pt)
 | `PROG_TOP` | 0.230 | 動的レイアウト開始 Y（年度テキスト分の余白含む） |
 | `PROG_BOT` | ≈0.958 | 動的レイアウト終了 Y |
 | `PROG_H` | ≈0.728 | 動的レイアウト利用可能高さ |
+
+Zoom セクション用定数（`layout.py`）:
+- `ZOOM_TEXT_SHIFT_RATIO = 0.060`（中央から左へずらす量）
+- `ZOOM_ICON_SIZE_SCALE = 1.35`（アイコンサイズ倍率）
+- `ZOOM_ICON_RIGHT_PAD = 0.040`（右余白）
+- `ZOOM_TEXT_ICON_GAP = 0.040`（テキストとアイコンの最小間隔）
+- `ZOOM_ICON_LOGO_SCALE = 0.72`（白ロゴサイズ倍率）
+- `ZOOM_ICON_ROTATE_DEG = 8.0`（アイコングループを反時計回りに傾ける角度）
 
 **PROG_TOP = 0.230 の根拠**: 右ストリップ上部に "2025年度" を縦積み描画するため、
 ヘッダー下（≈34px）からプログラム開始（≈258px）までの ≈224px が年度テキスト領域となる。
@@ -284,6 +291,7 @@ ReportLab: n * PDF_H     (841.89 pt) または  n * PDF_W     (595.27 pt)
 - `autumn_orange` → `autumn_leaves`
 
 テーマオブジェクトのキー: `accent`, `accent_light`, `title_bar`, `zoom_color`, `bg_image`
+（Zoom アイコン背景は `accent_light` を使用）
 
 固定色:
 - `DARK_BROWN = (80, 50, 30)` — メインテキスト・場所バッジ

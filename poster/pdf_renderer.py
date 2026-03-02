@@ -56,10 +56,17 @@ from poster.layout import (
     FS_PRES_NAME,
     FS_SANSHUUHI,
     FS_V_TITLE,
+    ZOOM_TEXT_SHIFT_RATIO,
+    ZOOM_ICON_SIZE_SCALE,
+    ZOOM_ICON_RIGHT_PAD,
+    ZOOM_TEXT_ICON_GAP,
+    ZOOM_ICON_LOGO_SCALE,
+    ZOOM_ICON_ROTATE_DEG,
     SECTION_CONTENT_SCALES,
 )
 from poster.models import PosterData
 from poster.qr_generator import generate_qr
+from poster.zoom_icon import build_zoom_icon
 from themes.color_themes import DARK_BROWN, WHITE, get_theme
 from utils.image_utils import make_background_layer
 
@@ -565,18 +572,59 @@ def render_poster_pdf(data: PosterData) -> bytes:
     c.line(venue_x, PDF_H - line_y, venue_x + venue_w, PDF_H - line_y)
     cur_y += (line_y + 2.0 - cur_y) + ph(0.018)
 
-    # ハイブリッド開催
+    # ハイブリッド開催（左寄せ気味） + テーマ連動 Zoom アイコン
     zoom_fs = max(10.0, ph(FS_VENUE_SM) * 1.8)
-    zoom_indent = max(5.0, zoom_fs * 0.6)
     zoom_text = "ハイブリッド開催"
     zoom_asc, _, zoom_ch = _font_metrics(_FONT_REG, zoom_fs)
-    zoom_baseline = PDF_H - (cur_y + zoom_asc)
-    _draw_text_raw(c, zoom_text, lc_x + zoom_indent, zoom_baseline, _FONT_REG, zoom_fs, DARK_BROWN)
     zoom_tw = _text_width(zoom_text, _FONT_REG, zoom_fs)
-    zoom_line_y = cur_y + zoom_ch + 2.0
+
+    icon_size = max(zoom_ch, zoom_ch * ZOOM_ICON_SIZE_SCALE)
+    block_h = max(zoom_ch, icon_size)
+    icon_right_pad = max(2.0, lc_w * ZOOM_ICON_RIGHT_PAD)
+    icon_x = lc_x + lc_w - icon_right_pad - icon_size
+    icon_y = cur_y + (block_h - icon_size) / 2
+
+    text_x = lc_x + (lc_w - zoom_tw) / 2 - (lc_w * ZOOM_TEXT_SHIFT_RATIO)
+    min_gap = max(4.0, lc_w * ZOOM_TEXT_ICON_GAP)
+    if text_x + zoom_tw > icon_x - min_gap:
+        text_x = icon_x - min_gap - zoom_tw
+    text_x = max(lc_x + max(2.0, lc_w * 0.02), text_x)
+    text_top = cur_y + (block_h - zoom_ch) / 2
+    zoom_baseline = PDF_H - (text_top + zoom_asc)
+    _draw_text_raw(c, zoom_text, text_x, zoom_baseline, _FONT_REG, zoom_fs, DARK_BROWN)
+
+    zoom_line_y = text_top + zoom_ch + 2.0
     c.setStrokeColor(_rgb(DARK_BROWN))
     c.setLineWidth(2.0)
-    c.line(lc_x + zoom_indent, PDF_H - zoom_line_y, lc_x + zoom_indent + zoom_tw, PDF_H - zoom_line_y)
+    c.line(text_x, PDF_H - zoom_line_y, text_x + zoom_tw, PDF_H - zoom_line_y)
+
+    try:
+        icon_color = theme.get("accent_light", theme["accent"])
+        icon_img = build_zoom_icon(
+            max(32, int(icon_size * 3)),
+            icon_color,
+            logo_scale=ZOOM_ICON_LOGO_SCALE,
+        ).convert("RGB")
+        icon_buf = io.BytesIO()
+        icon_img.save(icon_buf, format="PNG")
+        icon_buf.seek(0)
+        icon_reader = ImageReader(icon_buf)
+        cx = icon_x + icon_size / 2
+        cy = PDF_H - (icon_y + icon_size / 2)
+        c.saveState()
+        c.translate(cx, cy)
+        c.rotate(ZOOM_ICON_ROTATE_DEG)
+        c.drawImage(
+            icon_reader,
+            -icon_size / 2,
+            -icon_size / 2,
+            icon_size,
+            icon_size,
+        )
+        c.restoreState()
+    except Exception as e:
+        print(f"ZoomアイコンPDF描画エラー: {e}")
+
     cur_y += (zoom_line_y + 2.0 - cur_y) + ph(0.022)
 
     # 日付・時刻

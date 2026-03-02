@@ -59,10 +59,17 @@ from poster.layout import (
     FS_PRES_NAME,
     FS_SANSHUUHI,
     FS_V_TITLE,
+    ZOOM_TEXT_SHIFT_RATIO,
+    ZOOM_ICON_SIZE_SCALE,
+    ZOOM_ICON_RIGHT_PAD,
+    ZOOM_TEXT_ICON_GAP,
+    ZOOM_ICON_LOGO_SCALE,
+    ZOOM_ICON_ROTATE_DEG,
     SECTION_CONTENT_SCALES,
 )
 from poster.models import PosterData
 from poster.qr_generator import generate_qr
+from poster.zoom_icon import build_zoom_icon
 from themes.color_themes import DARK_BROWN, WHITE, get_theme
 from utils.image_utils import make_background_layer
 
@@ -321,11 +328,17 @@ class SVGCanvas:
         y_top: float,
         w: float,
         h: float,
+        transform: str = "",
     ):
         b64 = base64.b64encode(img_bytes).decode("ascii")
+        attrs = (
+            f'x="{x:.3f}" y="{y_top:.3f}" width="{w:.3f}" height="{h:.3f}" '
+            f'xlink:href="data:image/png;base64,{b64}"'
+        )
+        if transform:
+            attrs += f' transform="{transform}"'
         self._parts.append(
-            f'<image x="{x:.3f}" y="{y_top:.3f}" width="{w:.3f}" height="{h:.3f}" '
-            f'xlink:href="data:image/png;base64,{b64}"/>'
+            f"<image {attrs}/>"
         )
 
     def to_svg(self) -> str:
@@ -738,19 +751,42 @@ def render_poster_svg(
     c.line(venue_x, line_y, venue_x + venue_w, line_y, DARK_BROWN, 1.0)
     cur_y += (line_y + 2.0 - cur_y) + ph(0.018)
 
-    # ハイブリッド開催（左カラム中央揃え）
+    # ハイブリッド開催（左寄せ気味） + テーマ連動 Zoom アイコン
     zoom_fs = max(10.0, ph(FS_VENUE_SM) * 1.8)
     zoom_text = "ハイブリッド開催"
     zoom_asc, _, zoom_ch = _fm(_RL_GOTHIC, zoom_fs)
-    zoom_center = lc_x + lc_w / 2
-    zoom_baseline = cur_y + zoom_asc
-    # text-anchor="middle" で中央揃え（フォントメトリクス差の影響なし）
-    c.text(zoom_text, zoom_center, zoom_baseline, _SVG_GOTHIC, zoom_fs, DARK_BROWN, text_anchor="middle")
-    # 下線幅: 全角文字は Hiragino で 1em/char = zoom_fs × 文字数
-    zoom_line_w = len(zoom_text) * zoom_fs
-    zoom_line_y = cur_y + zoom_ch + 2.0
-    c.line(zoom_center - zoom_line_w / 2, zoom_line_y,
-           zoom_center + zoom_line_w / 2, zoom_line_y, DARK_BROWN, 2.0)
+    zoom_tw = _tw(zoom_text, _RL_GOTHIC, zoom_fs)
+
+    icon_size = max(zoom_ch, zoom_ch * ZOOM_ICON_SIZE_SCALE)
+    block_h = max(zoom_ch, icon_size)
+    icon_right_pad = max(2.0, lc_w * ZOOM_ICON_RIGHT_PAD)
+    icon_x = lc_x + lc_w - icon_right_pad - icon_size
+    icon_y = cur_y + (block_h - icon_size) / 2
+
+    text_x = lc_x + (lc_w - zoom_tw) / 2 - (lc_w * ZOOM_TEXT_SHIFT_RATIO)
+    min_gap = max(4.0, lc_w * ZOOM_TEXT_ICON_GAP)
+    if text_x + zoom_tw > icon_x - min_gap:
+        text_x = icon_x - min_gap - zoom_tw
+    text_x = max(lc_x + max(2.0, lc_w * 0.02), text_x)
+    text_top = cur_y + (block_h - zoom_ch) / 2
+    zoom_baseline = text_top + zoom_asc
+    c.text(zoom_text, text_x, zoom_baseline, _SVG_GOTHIC, zoom_fs, DARK_BROWN)
+
+    zoom_line_y = text_top + zoom_ch + 2.0
+    c.line(text_x, zoom_line_y, text_x + zoom_tw, zoom_line_y, DARK_BROWN, 2.0)
+    try:
+        icon_color = theme.get("accent_light", theme["accent"])
+        icon_img = build_zoom_icon(
+            max(32, int(icon_size * 3)),
+            icon_color,
+            logo_scale=ZOOM_ICON_LOGO_SCALE,
+        )
+        cx = icon_x + icon_size / 2
+        cy = icon_y + icon_size / 2
+        rot = f"rotate({-ZOOM_ICON_ROTATE_DEG:.3f}, {cx:.3f}, {cy:.3f})"
+        c.image(_embed_image_alpha(icon_img), icon_x, icon_y, icon_size, icon_size, transform=rot)
+    except Exception as e:
+        print(f"ZoomアイコンSVG描画エラー: {e}")
     cur_y += (zoom_line_y + 2.0 - cur_y) + ph(0.022)
 
     # 日付・時刻

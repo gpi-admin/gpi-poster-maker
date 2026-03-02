@@ -146,7 +146,7 @@ def render_poster(data: PosterData, scale: float = 1.0, transparent_bg: bool = F
 
     # Zoom セクション
     zoom_h = draw_zoom_section(
-        draw, lc_x, cur_y, lc_w,
+        canvas, draw, lc_x, cur_y, lc_w,
         ph(FS_VENUE_SM), data.zoom_note, theme
     )
     cur_y += zoom_h + ph(0.022)

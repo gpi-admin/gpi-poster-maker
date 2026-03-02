@@ -10,7 +10,16 @@ from poster.text_utils import (
 )
 from utils.font_manager import get_pillow_font, get_pillow_font_mincho
 from themes.color_themes import DARK_BROWN, WHITE, LIGHT_CREAM_BG
-from poster.layout import FOOTER_GROUP_SCALE
+from poster.layout import (
+    FOOTER_GROUP_SCALE,
+    ZOOM_TEXT_SHIFT_RATIO,
+    ZOOM_ICON_SIZE_SCALE,
+    ZOOM_ICON_RIGHT_PAD,
+    ZOOM_TEXT_ICON_GAP,
+    ZOOM_ICON_LOGO_SCALE,
+    ZOOM_ICON_ROTATE_DEG,
+)
+from poster.zoom_icon import build_zoom_icon
 
 # ─── 共通ユーティリティ ────────────────────────────────────────────────────
 
@@ -193,22 +202,44 @@ def draw_address(draw: ImageDraw.ImageDraw,
 
 # ─── Zoom セクション ───────────────────────────────────────────────────────
 
-def draw_zoom_section(draw: ImageDraw.ImageDraw,
+def draw_zoom_section(canvas: Image.Image,
+                       draw: ImageDraw.ImageDraw,
                        x: int, y: int, w: int,
                        fs: int, zoom_note: str, theme: dict) -> int:
     """
-    「ハイブリッド配信あり」を下線付きで描画。
+    「ハイブリッド開催」を左寄せ気味に配置し、
+    右側にテーマ連動の Zoom アイコンを描画する。
     返値: 使用した高さ（px）
     """
     text = "ハイブリッド開催"
     font_size = max(10, int(fs * 1.8))
     font = get_pillow_font("Bold", font_size)
-    indent = max(5, int(font_size * 0.6))
     tw, th = get_text_size(draw, text, font)
-    draw.text((x + indent, y), text, fill=DARK_BROWN, font=font)
-    # 下線
-    line_y = y + th + 2
-    draw.line([(x + indent, line_y), (x + indent + tw, line_y)], fill=DARK_BROWN, width=2)
+
+    icon_size = max(th, int(th * ZOOM_ICON_SIZE_SCALE))
+    block_h = max(th, icon_size)
+    right_pad = max(2, int(w * ZOOM_ICON_RIGHT_PAD))
+    icon_x = x + w - right_pad - icon_size
+    icon_y = y + (block_h - icon_size) // 2
+
+    text_x = x + (w - tw) // 2 - int(w * ZOOM_TEXT_SHIFT_RATIO)
+    min_gap = max(4, int(w * ZOOM_TEXT_ICON_GAP))
+    if text_x + tw > icon_x - min_gap:
+        text_x = icon_x - min_gap - tw
+    text_x = max(x + max(2, int(w * 0.02)), text_x)
+    text_y = y + (block_h - th) // 2
+
+    draw.text((text_x, text_y), text, fill=DARK_BROWN, font=font)
+    line_y = text_y + th + 2
+    draw.line([(text_x, line_y), (text_x + tw, line_y)], fill=DARK_BROWN, width=2)
+
+    icon_color = theme.get("accent_light", theme.get("accent", (120, 170, 220)))
+    icon = build_zoom_icon(icon_size, icon_color, logo_scale=ZOOM_ICON_LOGO_SCALE)
+    resampling = getattr(Image, "Resampling", Image)
+    rotated = icon.rotate(ZOOM_ICON_ROTATE_DEG, resample=resampling.BICUBIC, expand=True)
+    cx = icon_x + icon_size // 2
+    cy = icon_y + icon_size // 2
+    canvas.paste(rotated, (cx - rotated.width // 2, cy - rotated.height // 2), rotated)
     return line_y + 2 - y
 
 
