@@ -201,6 +201,7 @@ def init_state():
         "bg_opacity": 35,
         "selected_bg": "",
         "selected_decos": [],
+        "use_custom_bg": False,
         "contact_email": "gpi.office.med@gmail.com",
     }
     for k, v in defaults.items():
@@ -286,9 +287,10 @@ def _build_poster_data(uploaded_bg=None, uploaded_decos_files=None) -> PosterDat
     bg_path = None
     if uploaded_bg is not None:
         tmp_path = _get_session_upload_dir() / "bg_upload.png"
-        with open(tmp_path, "wb") as f:
-            f.write(uploaded_bg.read())
+        tmp_path.write_bytes(uploaded_bg.getvalue())
         bg_path = str(tmp_path)
+    elif ss.get("use_custom_bg") and ss.get("_uploaded_bg_path") and Path(ss["_uploaded_bg_path"]).exists():
+        bg_path = ss["_uploaded_bg_path"]
     elif ss.get("selected_bg") and ss["selected_bg"] != "（背景なし）":
         candidate = BG_DIR / ss["selected_bg"]
         if candidate.exists():
@@ -304,9 +306,12 @@ def _build_poster_data(uploaded_bg=None, uploaded_decos_files=None) -> PosterDat
         upload_dir = _get_session_upload_dir()
         for i, f in enumerate(uploaded_decos_files[:2]):
             p = upload_dir / f"deco_{i}.png"
-            with open(p, "wb") as out:
-                out.write(f.read())
+            p.write_bytes(f.getvalue())
             deco_paths.append(str(p))
+    elif ss.get("_uploaded_deco_paths"):
+        for path in ss["_uploaded_deco_paths"]:
+            if Path(path).exists():
+                deco_paths.append(path)
 
     # 司会・座長
     mc = None
@@ -624,23 +629,44 @@ elif step == "7. イラスト & 出力":
 
         # 背景なし / プリセット / カスタム
         preset_bgs = list_assets(BG_DIR)
-        use_custom_bg = st.checkbox("カスタム背景画像をアップロードする")
-        uploaded_bg = None
-        if use_custom_bg:
-            uploaded_bg = st.file_uploader(
-                "背景画像 (PNG / JPG)", type=["png", "jpg", "jpeg"],
-                key="bg_upload"
+        if preset_bgs:
+            opts = ["（背景なし）"] + preset_bgs
+            cur = st.session_state.get("selected_bg", "（背景なし）")
+            cur_idx = opts.index(cur) if cur in opts else 0
+            st.session_state["selected_bg"] = st.selectbox(
+                "プリセット背景を選択",
+                options=opts,
+                index=cur_idx,
             )
         else:
-            if preset_bgs:
-                st.session_state["selected_bg"] = st.selectbox(
-                    "プリセット背景を選択",
-                    options=["（背景なし）"] + preset_bgs,
-                    index=0,
-                )
-            else:
-                st.info("assets/illustrations/backgrounds/ に画像を追加してください")
-                st.session_state["selected_bg"] = ""
+            st.info("assets/illustrations/backgrounds/ に画像を追加してください")
+            st.session_state["selected_bg"] = ""
+
+        # カスタムアップロード（key= を使うことで Streamlit が session_state を直接管理し、
+        # ステップ切り替え後もチェック状態が確実に保持される）
+        use_custom_bg = st.checkbox(
+            "または、カスタム画像をアップロードする（プリセットより優先）",
+            key="use_custom_bg",
+        )
+        # file_uploader は常に描画することで、ステップ切り替え時もウィジェット状態が維持される
+        uploaded_bg = st.file_uploader(
+            "背景画像 (PNG / JPG)", type=["png", "jpg", "jpeg"],
+            key="bg_upload",
+            label_visibility="collapsed" if not use_custom_bg else "visible",
+        )
+        if uploaded_bg is not None:
+            # アップロード直後にテンポラリファイルへ書き出してパスを保存
+            tmp = _get_session_upload_dir() / "bg_upload.png"
+            tmp.write_bytes(uploaded_bg.getvalue())
+            st.session_state["_uploaded_bg_path"] = str(tmp)
+            st.session_state["_uploaded_bg_name"] = uploaded_bg.name
+        if not use_custom_bg:
+            # チェックを外したら保存済みパスをクリア
+            st.session_state.pop("_uploaded_bg_path", None)
+            st.session_state.pop("_uploaded_bg_name", None)
+        saved_path = st.session_state.get("_uploaded_bg_path", "")
+        if use_custom_bg and saved_path and Path(saved_path).exists():
+            st.caption(f"選択済み: {st.session_state.get('_uploaded_bg_name', '画像')}")
 
         st.session_state["bg_opacity"] = st.slider(
             "背景の不透明度 (%)", min_value=10, max_value=70,
@@ -666,6 +692,20 @@ elif step == "7. イラスト & 出力":
             accept_multiple_files=True,
             key="deco_upload"
         )
+        if uploaded_decos_files:
+            # アップロード直後にテンポラリファイルへ書き出してパスを保存
+            upload_dir = _get_session_upload_dir()
+            saved = []
+            for i, f in enumerate(uploaded_decos_files[:2]):
+                p = upload_dir / f"deco_{i}.png"
+                p.write_bytes(f.getvalue())
+                saved.append((f.name, str(p)))
+            st.session_state["_uploaded_deco_paths"] = [p for _, p in saved]
+            st.session_state["_uploaded_deco_names"] = [n for n, _ in saved]
+        saved_deco_paths = st.session_state.get("_uploaded_deco_paths", [])
+        if saved_deco_paths and any(Path(p).exists() for p in saved_deco_paths):
+            names = st.session_state.get("_uploaded_deco_names", [])
+            st.caption(f"選択済み: {', '.join(names)}")
 
         st.subheader("SVGフォント")
         from poster.svg_renderer import SVG_FONT_PRESETS, SVG_FONT_DEFAULT
