@@ -10,6 +10,7 @@ import json
 import sys
 import tempfile
 import uuid
+import hmac
 from pathlib import Path
 from datetime import date
 
@@ -29,6 +30,65 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+
+def _resolve_configured_password() -> str:
+    """secrets からパスワードを解決（複数のキー/階層に対応）。"""
+    candidates = []
+    for key in ("password", "PASSWORD", "app_password", "APP_PASSWORD"):
+        try:
+            candidates.append(st.secrets.get(key))
+        except Exception:
+            continue
+
+    for section_key in ("auth", "security", "app"):
+        try:
+            section = st.secrets.get(section_key)
+        except Exception:
+            continue
+        if hasattr(section, "get"):
+            candidates.append(section.get("password"))
+            candidates.append(section.get("PASSWORD"))
+
+    for value in candidates:
+        if isinstance(value, str):
+            normalized = value.strip()
+            if normalized:
+                return normalized
+    return ""
+
+
+def _password_fingerprint(password: str) -> str:
+    """パスワード比較用の固定フィンガープリントを返す。"""
+    return hmac.new(b"gpi_poster_auth", password.encode("utf-8"), "sha256").hexdigest()
+
+
+def _check_password() -> None:
+    """パスワードが設定されている場合のみ、ログインを必須化する。"""
+    configured_password = _resolve_configured_password()
+    if not configured_password:
+        return  # ローカル開発時など、未設定ならスルー
+    current_fingerprint = _password_fingerprint(configured_password)
+
+    if (
+        st.session_state.get("_authenticated") is True
+        and st.session_state.get("_authenticated_password_fp") == current_fingerprint
+    ):
+        return
+
+    st.session_state["_authenticated"] = False
+    st.markdown("### 🔒 ログイン")
+    pwd = st.text_input("パスワードを入力してください", type="password", key="_pwd_input")
+    if pwd and hmac.compare_digest(pwd.strip(), configured_password):
+        st.session_state["_authenticated"] = True
+        st.session_state["_authenticated_password_fp"] = current_fingerprint
+        st.rerun()
+    if pwd:
+        st.error("パスワードが違います")
+    st.stop()
+
+
+_check_password()
 
 # ─── フォント初期化（初回のみDL） ─────────────────────────────────────────
 
@@ -253,25 +313,6 @@ def _default_sections():
         },
     ]
 
-
-def _check_password() -> None:
-    """st.secrets に password が設定されている場合のみ認証画面を表示する。"""
-    if "password" not in st.secrets:
-        return  # ローカル開発時はスルー
-    if st.session_state.get("_authenticated"):
-        return
-    st.markdown("### 🔒 ログイン")
-    pwd = st.text_input("パスワードを入力してください", type="password", key="_pwd_input")
-    if pwd:
-        if pwd == st.secrets["password"]:
-            st.session_state["_authenticated"] = True
-            st.rerun()
-        else:
-            st.error("パスワードが違います")
-    st.stop()
-
-
-_check_password()
 init_state()
 
 
