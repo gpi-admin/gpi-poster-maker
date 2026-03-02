@@ -396,3 +396,5 @@ streamlit run app.py
 - **LayoutEngine の実測高さ計算**: タイトル・所属・氏名の高さは文字数推定ではなく実際の折り返し行で計測する。これにより、長文タイトル時でも所属と重ならない。
 
 - **Streamlit 保存/読み込み**: `_export_state()` / `_import_state()` は `with st.sidebar:` ブロックより**前**に定義する必要がある（実行順序の制約）。保存ファイルには `_version: "1.1"` を付与し、旧テーマキーは `_THEME_ALIASES` で自動変換する。
+
+- **パスワード認証（fail-close）**: `app.py` は起動直後に `_check_password()` を実行し、`st.secrets` に `password` / `passcode`（大文字・ネスト含む）が見つからない場合はアプリを停止する。WebApp で未設定時に無認証で使えてしまう状態を防ぐ設計。ローカルで一時的に無認証起動したい場合のみ環境変数 `GPI_ALLOW_UNLOCKED=1` を使う。

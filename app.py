@@ -11,6 +11,7 @@ import sys
 import tempfile
 import uuid
 import hmac
+import os
 from pathlib import Path
 from datetime import date
 
@@ -34,21 +35,30 @@ st.set_page_config(
 
 def _resolve_configured_password() -> str:
     """secrets からパスワードを解決（複数のキー/階層に対応）。"""
+    password_keys = {
+        "password", "passcode", "app_password", "gpi_password",
+        "PASSWORD", "PASSCODE", "APP_PASSWORD", "GPI_PASSWORD",
+    }
     candidates = []
-    for key in ("password", "PASSWORD", "app_password", "APP_PASSWORD"):
+    for key in password_keys:
         try:
             candidates.append(st.secrets.get(key))
         except Exception:
             continue
 
-    for section_key in ("auth", "security", "app"):
-        try:
-            section = st.secrets.get(section_key)
-        except Exception:
-            continue
-        if hasattr(section, "get"):
-            candidates.append(section.get("password"))
-            candidates.append(section.get("PASSWORD"))
+    def _collect_passwords(node):
+        if not hasattr(node, "items"):
+            return
+        for k, v in node.items():
+            if str(k) in password_keys and isinstance(v, str):
+                candidates.append(v)
+            if hasattr(v, "items"):
+                _collect_passwords(v)
+
+    try:
+        _collect_passwords(st.secrets)
+    except Exception:
+        pass
 
     for value in candidates:
         if isinstance(value, str):
@@ -67,7 +77,12 @@ def _check_password() -> None:
     """パスワードが設定されている場合のみ、ログインを必須化する。"""
     configured_password = _resolve_configured_password()
     if not configured_password:
-        return  # ローカル開発時など、未設定ならスルー
+        # 明示的に環境変数で許可した場合のみロックを無効化
+        if os.getenv("GPI_ALLOW_UNLOCKED", "").strip() == "1":
+            return
+        st.error("🔒 パスワードが未設定のため起動を停止しました。")
+        st.caption("管理者は Streamlit Secrets に `password`（または `passcode`）を設定してください。")
+        st.stop()
     current_fingerprint = _password_fingerprint(configured_password)
 
     if (
