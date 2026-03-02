@@ -305,8 +305,8 @@ class SVGCanvas:
         if not content:
             return
         # font_weight 未指定時:
-        # ゴシック → W6(600)
-        # 明朝 → Bold が存在するフォント(Hiragino等)なら 600、なければ 400
+        # ゴシック → Bold(700)
+        # 明朝 → Bold が存在するフォント(Hiragino等)なら 700、なければ 400
         # BIZ UDMincho は Bold バリアントが存在しないため 600 を要求すると
         # macOS CoreText が別フォント（Hiragino Mincho等）にフォールバックして
         # Linux/FreeType と異なる表示になる。
@@ -314,7 +314,7 @@ class SVGCanvas:
             if svg_font == self.mincho and not self._mincho_has_bold:
                 font_weight = "400"
             else:
-                font_weight = "600"
+                font_weight = "700"
         attrs = (
             f'x="{x:.3f}" y="{baseline_y:.3f}" '
             f'font-family="{_esc(svg_font)}" font-size="{size:.3f}" '
