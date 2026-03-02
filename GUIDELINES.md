@@ -314,6 +314,7 @@ force_bold_fonts(enabled=True)  # 太字モードON/OFFを一時切替（既定O
 
 **macOS 環境ではシステムの Hiragino フォント (`.ttc`) を優先的に使用する場合がある。**
 テスト時は `ensure_fonts()` を必ず呼び出すこと。
+`cairosvg` レンダリングでは `Hiragino Sans` の `font-weight` 指定が太字に反映されにくいため、SVG生成時（`embed_fonts=False`）に `Hiragino Sans W6` / `Hiragino Mincho ProN W6` を system family として使用する。
 
 本実装では太字モードが既定でONのため、Pillow描画は `Regular→Bold`, `Bold→Black` に自動昇格する。
 PDFは基本的に通常のテキスト描画で出力する。  

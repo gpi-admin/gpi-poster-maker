@@ -132,6 +132,10 @@ SVG_FONT_PRESETS: dict[str, SVGFontConfig] = {
         key="hiragino",
         gothic_family="Hiragino Sans",
         mincho_family="Hiragino Mincho ProN",
+        # cairosvg は "Hiragino Sans" + font-weight を太字として解決しないため、
+        # システムフォント名で W6 を明示する（embed_fonts=False 時に使用）。
+        system_gothic_family="Hiragino Sans W6",
+        system_mincho_family="Hiragino Mincho ProN W6",
     ),
     "biz_ud": SVGFontConfig(
         key="biz_ud",

@@ -798,7 +798,8 @@ elif step == "7. イラスト & 出力":
                     # BIZ UD: @font-face data URI を embed_fonts=True で埋め込む。
                     #   font-family 名をフォント内部名（"BIZ UDGothic"/"BIZ UDMincho"）と一致させることで
                     #   cairosvg が正しくフォントを解決できる（fontconfig 不要）。
-                    # ヒラギノ(macOS): SVGそのまま（cairosvgはmacOSシステムフォントを参照）
+                    # ヒラギノ(macOS): cairosvg用に embed_fonts=False で再生成し、
+                    #   system_*_family（W6明示）を使って太字を安定反映する。
                     # ヒラギノ(Linux): BIZ UD にフォールバック
                     if user_font_key == "biz_ud":
                         svg_bytes = svg_str.encode("utf-8")  # embed_fonts=True のため svg_str を再利用
@@ -809,8 +810,12 @@ elif step == "7. イラスト & 出力":
                             font_key="biz_ud",
                         ).encode("utf-8")
                     else:
-                        # macOS でヒラギノ選択 → システムフォントをそのまま使用
-                        svg_bytes = svg_str.encode("utf-8")
+                        # macOS でヒラギノ選択 → cairosvg 用に system family(W6)で再生成
+                        svg_bytes = svg_mod.render_poster_svg(
+                            poster_data,
+                            font_key=user_font_key,
+                            embed_fonts=False,
+                        ).encode("utf-8")
 
                     # プレビュー用 PNG（scale=2）
                     preview_png = cairosvg.svg2png(bytestring=svg_bytes, scale=2)
