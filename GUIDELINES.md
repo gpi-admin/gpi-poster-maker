@@ -186,10 +186,10 @@ ReportLab: n * PDF_H     (841.89 pt) または  n * PDF_W     (595.27 pt)
 
 Zoom セクション用定数（`layout.py`）:
 - `ZOOM_TEXT_SHIFT_RATIO = 0.060`（中央から左へずらす量）
-- `ZOOM_ICON_SIZE_SCALE = 1.35`（アイコンサイズ倍率）
+- `ZOOM_ICON_SIZE_SCALE = 1.45`（アイコンサイズ倍率）
 - `ZOOM_ICON_RIGHT_PAD = 0.040`（右余白）
 - `ZOOM_TEXT_ICON_GAP = 0.040`（テキストとアイコンの最小間隔）
-- `ZOOM_ICON_LOGO_SCALE = 0.72`（白ロゴサイズ倍率）
+- `ZOOM_ICON_LOGO_SCALE = 0.80`（白ロゴサイズ倍率）
 - `ZOOM_ICON_ROTATE_DEG = 8.0`（アイコングループを反時計回りに傾ける角度）
 
 **PROG_TOP = 0.230 の根拠**: 右ストリップ上部に "2025年度" を縦積み描画するため、
