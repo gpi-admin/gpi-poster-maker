@@ -358,8 +358,8 @@ def _draw_vertical_stack(
         if chv in _VERTICAL_ROTATE_CHARS:
             # 長音符だけ回転させ、縦書き表現に寄せる
             c.saveState()
-            # 回転中心を少し左へ寄せて、見た目の中央を補正する
-            center_x = x + strip_w / 2 - size * 0.12
+            # 回転中心は帯中央に合わせる
+            center_x = x + strip_w / 2
             center_y = PDF_H - (char_top + ch / 2)
             c.translate(center_x, center_y)
             c.rotate(-90)

@@ -475,13 +475,16 @@ def _paste_rotated_char(canvas: Image.Image, char: str, font,
     # stroke_width=1 で明朝体を程よく太く見せる
     tmp_d.text((sq // 2, sq // 2), char, fill=(*DARK_BROWN, 255),
                font=font, anchor="mm", stroke_width=1, stroke_fill=(*DARK_BROWN, 255))
-    # 90°時計回りに回転（正方形なのでサイズ不変）
-    tmp_rot = tmp.rotate(-90, expand=False)
-    # strip と文字セル内で中央配置
-    px = x + (strip_w - sq) // 2 + x_shift
-    py = y + (ch_ref - sq) // 2
+    # 90°時計回りに回転
+    tmp_rot = tmp.rotate(-90, expand=True)
+    # 回転後の実グリフ領域で中央合わせ（余白起因の見かけズレを抑える）
+    bbox = tmp_rot.getbbox()
+    glyph = tmp_rot.crop(bbox) if bbox else tmp_rot
+    gw, gh = glyph.size
+    px = x + (strip_w - gw) // 2 + x_shift
+    py = y + (ch_ref - gh) // 2
     base = canvas.convert("RGBA")
-    base.paste(tmp_rot, (px, py), tmp_rot)
+    base.paste(glyph, (px, py), glyph)
     if canvas.mode == "RGBA":
         canvas.paste(base)
     else:
@@ -533,10 +536,7 @@ def draw_vertical_title(canvas: Image.Image,
     for char in main_title:
         if char in _VERTICAL_ROTATE_CHARS:
             # 「ー」は90°時計回りに回転して縦棒として描画
-            _paste_rotated_char(
-                canvas, char, font, x, cur_y, strip_w, char_step,
-                x_shift=-max(2, int(font_size * 0.12))
-            )
+            _paste_rotated_char(canvas, char, font, x, cur_y, strip_w, char_step)
             draw = ImageDraw.Draw(canvas)   # canvas更新後にdrawを再取得
         else:
             cw, _ = get_text_size(draw, char, font)
