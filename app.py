@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from poster.models import PosterData, Section, ContentItem, PersonInfo
 from poster.email_text import build_announcement_email_text
 from themes.color_themes import THEMES, get_theme, rgb_to_hex, hex_to_rgb
-from utils.font_manager import ensure_fonts
+from utils.font_manager import ensure_fonts, ensure_fontconfig_fonts
 
 # ─── ページ設定 ───────────────────────────────────────────────────────────
 
@@ -111,6 +111,7 @@ _check_password()
 def init_fonts():
     msgs = []
     ensure_fonts(progress_callback=lambda m: msgs.append(m))
+    ensure_fontconfig_fonts(progress_callback=lambda m: msgs.append(m))
     return msgs
 
 
@@ -862,11 +863,14 @@ elif step == "7. イラスト & 出力":
                             embed_fonts=False,
                         ).encode("utf-8")
                     else:
-                        # それ以外は BIZ UD 埋め込みで環境差をなくす
+                        # それ以外は BIZ UD を使用。
+                        # fontconfig 登録できた環境では system font 解決、
+                        # 失敗時は @font-face 埋め込みへフォールバック。
+                        biz_fontconfig_ready = ensure_fontconfig_fonts()
                         svg_bytes = svg_mod.render_poster_svg(
                             poster_data,
                             font_key="biz_ud",
-                            embed_fonts=True,
+                            embed_fonts=not biz_fontconfig_ready,
                         ).encode("utf-8")
 
                     preview_png = cairosvg.svg2png(bytestring=svg_bytes, scale=2)

@@ -6,6 +6,7 @@ macOS 組み込みの ヒラギノ角ゴシック を優先して使用する。
 
 import subprocess
 import urllib.request
+import shutil
 from contextlib import contextmanager
 from contextvars import ContextVar
 from pathlib import Path
@@ -51,6 +52,7 @@ NOTO_URLS = {
 # ダウンロード試行フラグ
 _download_attempted = False
 _force_bold_ctx: ContextVar[bool] = ContextVar("force_bold_fonts", default=True)
+_fontconfig_prepared = False
 
 
 @contextmanager
@@ -174,6 +176,51 @@ def ensure_fonts(progress_callback=None) -> bool:
             all_ok = False
 
     return all_ok
+
+
+def ensure_fontconfig_fonts(progress_callback=None) -> bool:
+    """
+    CairoSVG/fontconfig 向けに BIZ UD フォントをユーザーフォントディレクトリへ配置する。
+    主に Linux/Cloud 環境での SVG→PNG/PDF 変換時の文字化け防止用。
+    """
+    global _fontconfig_prepared
+    if _fontconfig_prepared:
+        return True
+
+    biz_sources = [
+        BIZ_FONT_PATHS.get("Regular"),
+        BIZ_FONT_PATHS.get("Bold"),
+        BIZ_MINCHO_PATH,
+    ]
+    valid_sources = [p for p in biz_sources if p and _is_valid_font(str(p))]
+    if not valid_sources:
+        return False
+
+    try:
+        target_dir = Path.home() / ".local" / "share" / "fonts" / "gpi_poster"
+        target_dir.mkdir(parents=True, exist_ok=True)
+        copied = False
+        for src in valid_sources:
+            dst = target_dir / src.name
+            if not dst.exists() or dst.stat().st_size != src.stat().st_size:
+                shutil.copy2(src, dst)
+                copied = True
+
+        # fontconfig キャッシュ更新（コマンド不在でも継続）
+        cmd = ["fc-cache", "-f", str(target_dir)]
+        if progress_callback:
+            progress_callback("BIZ UD フォントを fontconfig に登録中...")
+        try:
+            subprocess.run(cmd, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception:
+            pass
+
+        _fontconfig_prepared = True
+        if copied and progress_callback:
+            progress_callback("BIZ UD フォントの登録を更新しました")
+        return True
+    except Exception:
+        return False
 
 
 _rl_fonts_registered = False
