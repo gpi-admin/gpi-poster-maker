@@ -839,11 +839,10 @@ elif step == "7. イラスト & 出力":
 
         if generate_btn:
             poster_data = _build_poster_data(uploaded_bg, uploaded_decos_files)
-            with st.spinner("ポスターを生成中（Pillow / ReportLab）..."):
+            with st.spinner("ポスターを生成中..."):
                 try:
                     import importlib
-                    from poster.preview_renderer import render_poster
-                    from poster.pdf_renderer import render_poster_pdf
+                    import cairosvg
                     svg_mod = importlib.import_module("poster.svg_renderer")
                     svg_mod = importlib.reload(svg_mod)
                     user_font_key = st.session_state.get("svg_font_key", "hiragino")
@@ -853,20 +852,26 @@ elif step == "7. イラスト & 出力":
                         font_key=user_font_key,
                     )
 
-                    # プレビューPNG（Pillow）
-                    preview_img = render_poster(poster_data, scale=1.0)
-                    preview_buf = io.BytesIO()
-                    preview_img.save(preview_buf, format="PNG")
-                    preview_png = preview_buf.getvalue()
+                    # preview/png/pdf は常に同じ SVG レンダラー由来に統一する。
+                    # ヒラギノが利用できない環境でヒラギノ指定時は BIZ UD にフォールバック。
+                    if user_font_key == "hiragino" and _hiragino_available():
+                        # ローカル(macOS) + ヒラギノ指定: システムフォントで描画
+                        svg_bytes = svg_mod.render_poster_svg(
+                            poster_data,
+                            font_key="hiragino",
+                            embed_fonts=False,
+                        ).encode("utf-8")
+                    else:
+                        # それ以外は BIZ UD 埋め込みで環境差をなくす
+                        svg_bytes = svg_mod.render_poster_svg(
+                            poster_data,
+                            font_key="biz_ud",
+                            embed_fonts=True,
+                        ).encode("utf-8")
 
-                    # ダウンロード用高解像度PNG（約300dpi相当）
-                    export_img = render_poster(poster_data, scale=3.0)
-                    export_buf = io.BytesIO()
-                    export_img.save(export_buf, format="PNG")
-                    export_png = export_buf.getvalue()
-
-                    # 印刷用PDF（ReportLab）
-                    export_pdf = render_poster_pdf(poster_data)
+                    preview_png = cairosvg.svg2png(bytestring=svg_bytes, scale=2)
+                    export_png = cairosvg.svg2png(bytestring=svg_bytes, scale=4)
+                    export_pdf = cairosvg.svg2pdf(bytestring=svg_bytes)
 
                     st.session_state["preview_png"] = preview_png
                     st.session_state["export_png_bytes"] = export_png

@@ -12,9 +12,9 @@
 
 | 出力形式 | 解像度 / 品質 | ライブラリ |
 |---------|-------------|-----------|
-| プレビュー (PNG) | 794×1123 px (96 DPI) | Pillow |
-| 本番 PDF | A4 ベクター（Illustrator 編集可 / 透過対応） | ReportLab |
-| 高解像度 PNG | 2480×3508 px (300 DPI) | Pillow |
+| プレビュー (PNG) | 794×1123 px (96 DPI) | SVG renderer + CairoSVG（統一） |
+| 本番 PDF | A4 ベクター | SVG renderer + CairoSVG（統一） |
+| 高解像度 PNG | 2480×3508 px (300 DPI) | SVG renderer + CairoSVG（統一） |
 
 ---
 
