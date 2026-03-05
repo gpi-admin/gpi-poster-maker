@@ -839,10 +839,11 @@ elif step == "7. イラスト & 出力":
 
         if generate_btn:
             poster_data = _build_poster_data(uploaded_bg, uploaded_decos_files)
-            with st.spinner("ポスターを生成中（SVG → PNG / PDF）..."):
+            with st.spinner("ポスターを生成中（Pillow / ReportLab）..."):
                 try:
                     import importlib
-                    import cairosvg
+                    from poster.preview_renderer import render_poster
+                    from poster.pdf_renderer import render_poster_pdf
                     svg_mod = importlib.import_module("poster.svg_renderer")
                     svg_mod = importlib.reload(svg_mod)
                     user_font_key = st.session_state.get("svg_font_key", "hiragino")
@@ -851,35 +852,21 @@ elif step == "7. イラスト & 出力":
                         poster_data,
                         font_key=user_font_key,
                     )
-                    # cairosvg レンダリング用 SVG 決定:
-                    # BIZ UD: @font-face data URI を embed_fonts=True で埋め込む。
-                    #   font-family 名をフォント内部名（"BIZ UDGothic"/"BIZ UDMincho"）と一致させることで
-                    #   cairosvg が正しくフォントを解決できる（fontconfig 不要）。
-                    # ヒラギノ(macOS): cairosvg用に embed_fonts=False で再生成し、
-                    #   system_*_family（W6明示）を使って太字を安定反映する。
-                    # ヒラギノ(Linux): BIZ UD にフォールバック
-                    if user_font_key == "biz_ud":
-                        svg_bytes = svg_str.encode("utf-8")  # embed_fonts=True のため svg_str を再利用
-                    elif not _hiragino_available():
-                        # Linux でヒラギノが選択されていた場合は BIZ UD にフォールバック
-                        svg_bytes = svg_mod.render_poster_svg(
-                            poster_data,
-                            font_key="biz_ud",
-                        ).encode("utf-8")
-                    else:
-                        # macOS でヒラギノ選択 → cairosvg 用に system family(W6)で再生成
-                        svg_bytes = svg_mod.render_poster_svg(
-                            poster_data,
-                            font_key=user_font_key,
-                            embed_fonts=False,
-                        ).encode("utf-8")
 
-                    # プレビュー用 PNG（scale=2）
-                    preview_png = cairosvg.svg2png(bytestring=svg_bytes, scale=2)
-                    # ダウンロード用高解像度 PNG（scale=4 ≈ 300 DPI）
-                    export_png = cairosvg.svg2png(bytestring=svg_bytes, scale=4)
-                    # 印刷用 PDF
-                    export_pdf = cairosvg.svg2pdf(bytestring=svg_bytes)
+                    # プレビューPNG（Pillow）
+                    preview_img = render_poster(poster_data, scale=1.0)
+                    preview_buf = io.BytesIO()
+                    preview_img.save(preview_buf, format="PNG")
+                    preview_png = preview_buf.getvalue()
+
+                    # ダウンロード用高解像度PNG（約300dpi相当）
+                    export_img = render_poster(poster_data, scale=3.0)
+                    export_buf = io.BytesIO()
+                    export_img.save(export_buf, format="PNG")
+                    export_png = export_buf.getvalue()
+
+                    # 印刷用PDF（ReportLab）
+                    export_pdf = render_poster_pdf(poster_data)
 
                     st.session_state["preview_png"] = preview_png
                     st.session_state["export_png_bytes"] = export_png
