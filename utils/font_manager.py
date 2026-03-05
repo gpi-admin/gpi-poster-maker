@@ -20,6 +20,7 @@ BIZ_FONT_PATHS = {
     "Bold":    _BIZ_FONT_DIR / "BIZUDGothic-Bold.ttf",
     "Black":   _BIZ_FONT_DIR / "BIZUDGothic-Bold.ttf",  # Black → Bold でフォールバック
 }
+BIZ_MINCHO_PATH = _BIZ_FONT_DIR / "BIZUDMincho-Regular.ttf"
 
 # macOS ヒラギノ角ゴシック (システムフォント)
 # W3 ≈ Regular, W6 ≈ Bold, W8/W9 ≈ Black
@@ -248,7 +249,7 @@ def get_pillow_font(weight: str = "Regular", size: int = 20):
 
 def get_pillow_font_mincho(weight: str = "Regular", size: int = 20):
     """Pillow ImageFont を返す（明朝体）。
-    macOS ヒラギノ明朝 ProN を使用。利用不可の場合はゴシックにフォールバック。
+    優先度: macOS ヒラギノ明朝 ProN > BIZ UD明朝 > ゴシック
     """
     from PIL import ImageFont
     weight = _resolve_weight(weight)
@@ -258,5 +259,11 @@ def get_pillow_font_mincho(weight: str = "Regular", size: int = 20):
             return ImageFont.truetype(HIRAGINO_MINCHO_PATH, size, index=idx)
         except Exception:
             pass
-    # フォールバック: ゴシック体
+    # Linux/Cloud 用: BIZ UD明朝（Regularのみ）
+    if _is_valid_font(str(BIZ_MINCHO_PATH)):
+        try:
+            return ImageFont.truetype(str(BIZ_MINCHO_PATH), size)
+        except Exception:
+            pass
+    # 最終フォールバック: ゴシック体
     return get_pillow_font(weight, size)
