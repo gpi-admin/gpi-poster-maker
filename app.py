@@ -890,7 +890,7 @@ elif step == "7. イラスト & 出力":
                     st.code(traceback.format_exc())
 
         if "preview_png" in st.session_state:
-            st.image(st.session_state["preview_png"], use_column_width=True)
+            st.image(st.session_state["preview_png"], use_container_width=True)
 
             year = st.session_state["year"]
             num = st.session_state["session_num"]
