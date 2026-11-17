@@ -26,7 +26,8 @@ from poster.layout import (
     FS_MC_BADGE, FS_MC_AFF, FS_MC_NAME,
     FS_AUD, FS_QR_CAP, FS_FOOTER,
     FS_PROG_TIME, FS_PROG_BADGE, FS_PROG_TITLE,
-    FS_PRESENTER, FS_PRES_NAME, FS_SANSHUUHI,
+    FS_PRESENTER, FS_PRES_NAME, FS_PROG_SUBTITLE, FS_SANSHUUHI,
+    NAME_LINE_ADVANCE_PROG, PROG_SUBTITLE_SPACING,
     FS_V_TITLE,
     SECTION_CONTENT_SCALES,
 )
@@ -256,24 +257,30 @@ def render_poster(data: PosterData, scale: float = 1.0, transparent_bg: bool = F
                             block.data["label"], theme)
 
         elif block.kind == "title":
-            font_t = get_pillow_font("Bold", int(ph(FS_PROG_TITLE) * sc * cs))
-            lines = block.data.get("lines") or wrap_text_jp(
-                draw, block.data["text"], font_t, prog_w
-            )
-            draw_text_multiline(draw, lines, font_t, prog_x, by, DARK_BROWN, 1.35)
+            us = block.data.get("user_scale", 1.0)
+            font_t = get_pillow_font("Bold", max(1, int(ph(FS_PROG_TITLE) * sc * cs * us)))
+            draw_text_multiline(draw, block.data.get("lines") or [], font_t,
+                                 prog_x, by, DARK_BROWN, 1.35)
+
+        elif block.kind == "subtitle":
+            us = block.data.get("user_scale", 1.0)
+            font_s = get_pillow_font("Regular", max(1, int(ph(FS_PROG_SUBTITLE) * sc * cs * us)))
+            draw_text_multiline(draw, block.data.get("lines") or [], font_s,
+                                 prog_x, by, DARK_BROWN, PROG_SUBTITLE_SPACING)
 
         elif block.kind == "affiliation":
-            font_a = get_pillow_font("Regular", int(ph(FS_PRESENTER) * sc * cs))
-            lines = block.data.get("lines") or wrap_text_jp(
-                draw, block.data["text"], font_a, prog_w
-            )
-            draw_text_multiline(draw, lines, font_a, prog_x, by, DARK_BROWN, 1.25)
+            us = block.data.get("user_scale", 1.0)
+            font_a = get_pillow_font("Regular", max(1, int(ph(FS_PRESENTER) * sc * cs * us)))
+            draw_text_multiline(draw, block.data.get("lines") or [], font_a,
+                                 prog_x, by, DARK_BROWN, 1.25)
 
         elif block.kind == "name":
+            us = block.data.get("user_scale", 1.0)
             draw_presenter(draw, prog_x, by, prog_w,
-                            "", block.data["text"],
-                            int(ph(FS_PRESENTER) * sc * cs),
-                            int(ph(FS_PRES_NAME) * sc * cs))
+                            block.data.get("lines") or [],
+                            block.data.get("fit", 1.0),
+                            ph(FS_PRES_NAME) * sc * cs * us,
+                            NAME_LINE_ADVANCE_PROG)
 
     # ─── 右ストリップ: 第N部ラベルボックス ──────────────────────────────
     for i, pos in enumerate(section_positions):

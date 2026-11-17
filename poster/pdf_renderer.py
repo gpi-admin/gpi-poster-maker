@@ -55,11 +55,20 @@ from poster.layout import (
     FS_PROG_TITLE,
     FS_PRESENTER,
     FS_PRES_NAME,
+    FS_PROG_SUBTITLE,
     FS_SANSHUUHI,
     FS_V_TITLE,
     SECTION_CONTENT_SCALES,
+    NAME_FIT_MIN,
+    NAME_LINE_ADVANCE_MC,
+    NAME_LINE_ADVANCE_PROG,
+    NAME_MC_RIGHT_MARGIN,
+    PROG_SUBTITLE_SPACING,
+    clamp_user_scale,
+    honorific_size,
 )
 from poster.models import PosterData
+from poster.name_utils import parse_name_block
 from poster.qr_generator import generate_qr
 from poster.zoom_icon import build_zoom_icon
 from themes.color_themes import DARK_BROWN, WHITE, get_theme
@@ -237,6 +246,57 @@ def _draw_multiline(
         _draw_text_raw(c, line, lx, baseline, font, size, color)
         cur_top += line_h
     return line_h * len(lines)
+
+
+def _pdf_name_fit(lines: list, base_size: float, max_w: float) -> float:
+    """最も幅の広い行が max_w を超える場合の一律縮小率（NAME_FIT_MIN 以上）。収まれば 1.0。
+    PDF の描画フォント（_FONT_REG）で幅を測る。"""
+    if not lines:
+        return 1.0
+    hon = honorific_size(base_size)
+    widest = max(
+        sum(_text_width(t, _FONT_REG, hon if is_hon else base_size) for t, is_hon in line)
+        for line in lines
+    )
+    if widest <= max_w or widest <= 0:
+        return 1.0
+    return max(NAME_FIT_MIN, max_w / widest)
+
+
+def _draw_name_block_pdf(
+    c: rl_canvas.Canvas,
+    lines: list,
+    fit: float,
+    base_size: float,
+    right_edge: float,
+    y_top: float,
+    advance: float,
+) -> float:
+    """氏名ブロック（1行=1名・右寄せ・敬称は小さめ・本体と敬称は下端揃え）を描画。
+    lines は parse_name_block() の結果、fit は計測済みの縮小率（再計算しない）。
+    返値: 消費高さ（pt）。"""
+    if not lines:
+        return 0.0
+    name_size = base_size * fit
+    hon_size = honorific_size(name_size)
+    n_asc, _, n_h = _font_metrics(_FONT_REG, name_size)
+    h_asc, _, h_h = _font_metrics(_FONT_REG, hon_size)
+    line_h = max(n_h, h_h)
+    cur_top = y_top
+    for line in lines:
+        widths = [
+            _text_width(t, _FONT_REG, hon_size if is_hon else name_size) for t, is_hon in line
+        ]
+        for i, (text, is_hon) in enumerate(line):
+            x = right_edge - sum(widths[i:])
+            if is_hon:
+                baseline = PDF_H - (cur_top + (line_h - h_h) + h_asc)
+                _draw_text_raw(c, text, x, baseline, _FONT_REG, hon_size, DARK_BROWN)
+            else:
+                baseline = PDF_H - (cur_top + (line_h - n_h) + n_asc)
+                _draw_text_raw(c, text, x, baseline, _FONT_REG, name_size, DARK_BROWN)
+        cur_top += line_h * advance
+    return line_h * advance * len(lines)
 
 
 def _fit_font_size(text: str, font: str, max_w: float, max_size: float, min_size: float) -> float:
@@ -733,40 +793,25 @@ def render_poster_pdf(data: PosterData) -> bytes:
         )
         cur_y += badge_h2 + ph(FS_MC_BADGE) * 0.7
 
-        aff_lines = _wrap_jp(person.affiliation, _FONT_REG, fs_mc_aff, lc_w)
-        aff_h = _draw_multiline(c, aff_lines, lc_x, cur_y, _FONT_REG, fs_mc_aff, DARK_BROWN, 1.2)
-        cur_y += aff_h + fs_mc_aff * 0.5
+        # ユーザー指定倍率（左カラムは LayoutEngine を通らないためここでクランプ）
+        us_aff = clamp_user_scale(getattr(person, "affiliation_scale", 1.0))
+        us_name = clamp_user_scale(getattr(person, "name_scale", 1.0))
 
-        fs_sensei = max(8.0, fs_mc_name * 0.85)
-        nm_w = _text_width(person.name, _FONT_REG, fs_mc_name)
-        ss_w = _text_width(" 先生", _FONT_REG, fs_sensei)
-        _, _, nm_h = _font_metrics(_FONT_REG, fs_mc_name)
-        ss_asc, _, ss_h = _font_metrics(_FONT_REG, fs_sensei)
-        nm_asc, _, _ = _font_metrics(_FONT_REG, fs_mc_name)
-        line_h = max(nm_h, ss_h)
-        right_margin = fs_mc_name * 1.0
-        right_edge = lc_x + lc_w - right_margin
-        name_top = cur_y + (line_h - nm_h)
-        ss_top = cur_y + (line_h - ss_h)
-        _draw_text_raw(
-            c,
-            person.name,
-            right_edge - nm_w - ss_w,
-            PDF_H - (name_top + nm_asc),
-            _FONT_REG,
-            fs_mc_name,
-            DARK_BROWN,
-        )
-        _draw_text_raw(
-            c,
-            " 先生",
-            right_edge - ss_w,
-            PDF_H - (ss_top + ss_asc),
-            _FONT_REG,
-            fs_sensei,
-            DARK_BROWN,
-        )
-        cur_y += line_h * 1.2
+        fs_aff = fs_mc_aff * us_aff
+        aff_lines = _wrap_jp(person.affiliation or "", _FONT_REG, fs_aff, lc_w)
+        aff_h = _draw_multiline(c, aff_lines, lc_x, cur_y, _FONT_REG, fs_aff, DARK_BROWN, 1.2)
+        cur_y += aff_h + fs_aff * 0.5
+
+        # 氏名（入力どおり。改行で複数名・敬称は小さめ・幅超過時は一律縮小）
+        name_lines = parse_name_block(person.name)
+        if name_lines:
+            fs_name_base = fs_mc_name * us_name
+            right_margin = fs_name_base * NAME_MC_RIGHT_MARGIN
+            fit = _pdf_name_fit(name_lines, fs_name_base, lc_w - right_margin)
+            cur_y += _draw_name_block_pdf(
+                c, name_lines, fit, fs_name_base, lc_x + lc_w - right_margin, cur_y,
+                NAME_LINE_ADVANCE_MC,
+            )
 
     if data.mc:
         draw_person_row("総合司会", data.mc)
@@ -903,45 +948,34 @@ def render_poster_pdf(data: PosterData) -> bytes:
             )
 
         elif block.kind == "title":
-            fs = ph(FS_PROG_TITLE) * sc * cs
-            lines = block.data.get("lines") or _wrap_jp(block.data.get("text", ""), _FONT_REG, fs, prog_w)
+            us = block.data.get("user_scale", 1.0)
+            fs = ph(FS_PROG_TITLE) * sc * cs * us
+            lines = block.data.get("lines") or []
             _draw_multiline(c, lines, prog_x, by, _FONT_REG, fs, DARK_BROWN, 1.35)
 
+        elif block.kind == "subtitle":
+            us = block.data.get("user_scale", 1.0)
+            fs = ph(FS_PROG_SUBTITLE) * sc * cs * us
+            lines = block.data.get("lines") or []
+            _draw_multiline(c, lines, prog_x, by, _FONT_REG, fs, DARK_BROWN, PROG_SUBTITLE_SPACING)
+
         elif block.kind == "affiliation":
-            fs = ph(FS_PRESENTER) * sc * cs
-            lines = block.data.get("lines") or _wrap_jp(block.data.get("text", ""), _FONT_REG, fs, prog_w)
+            us = block.data.get("user_scale", 1.0)
+            fs = ph(FS_PRESENTER) * sc * cs * us
+            lines = block.data.get("lines") or []
             _draw_multiline(c, lines, prog_x, by, _FONT_REG, fs, DARK_BROWN, 1.25)
 
         elif block.kind == "name":
-            name = block.data.get("text", "")
-            fs_name = ph(FS_PRES_NAME) * sc * cs
-            fs_sensei = max(8.0, fs_name * 0.85)
-            nm_w = _text_width(name, _FONT_REG, fs_name)
-            ss_w = _text_width(" 先生", _FONT_REG, fs_sensei)
-            nm_asc, _, nm_h = _font_metrics(_FONT_REG, fs_name)
-            ss_asc, _, ss_h = _font_metrics(_FONT_REG, fs_sensei)
-            line_h = max(nm_h, ss_h)
-            right_edge = prog_x + prog_w
-            name_top = by + (line_h - nm_h)
-            ss_top = by + (line_h - ss_h)
-            _draw_text_raw(
-                c,
-                name,
-                right_edge - nm_w - ss_w,
-                PDF_H - (name_top + nm_asc),
-                _FONT_REG,
-                fs_name,
-                DARK_BROWN,
-            )
-            _draw_text_raw(
-                c,
-                " 先生",
-                right_edge - ss_w,
-                PDF_H - (ss_top + ss_asc),
-                _FONT_REG,
-                fs_sensei,
-                DARK_BROWN,
-            )
+            name_lines = block.data.get("lines") or []
+            if name_lines:
+                us = block.data.get("user_scale", 1.0)
+                base = ph(FS_PRES_NAME) * sc * cs * us
+                # LayoutEngine は Pillow 計測（Hiragino）の fit。PDF は BIZ UD で描くため、
+                # 実描画フォントで幅超過しないよう PDF 側の fit との小さい方を使う（はみ出し防止）
+                fit = min(block.data.get("fit", 1.0), _pdf_name_fit(name_lines, base, prog_w))
+                _draw_name_block_pdf(
+                    c, name_lines, fit, base, prog_x + prog_w, by, NAME_LINE_ADVANCE_PROG,
+                )
 
     # 右ストリップ: 第N部ラベルボックス
     for i, pos in enumerate(section_positions):

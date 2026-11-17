@@ -13,7 +13,11 @@ from themes.color_themes import DARK_BROWN, WHITE, LIGHT_CREAM_BG
 import poster.layout as _layout
 from poster.layout import (
     FOOTER_GROUP_SCALE,
+    HONORIFIC_MIN_SIZE, HONORIFIC_SCALE,
+    NAME_FIT_MIN, NAME_LINE_ADVANCE_MC, NAME_MC_RIGHT_MARGIN,
+    clamp_user_scale,
 )
+from poster.name_utils import parse_name_block
 from poster.zoom_icon import build_zoom_icon
 
 # layout.py が旧版でも起動できるように既定値でフォールバック
@@ -354,6 +358,58 @@ def draw_date_time_left(draw: ImageDraw.ImageDraw,
     return cur_y - y
 
 
+# ─── 氏名ブロック（敬称込み自由入力・複数名・敬称は小さめ） ────────────────────
+
+def _name_fonts(base_px: float):
+    """氏名本体（Bold）と敬称（Regular・小さめ）のフォントを返す。LayoutEngine の Pillow 計測と同じ規則。"""
+    fs_n = max(1, int(base_px))
+    fs_h = max(int(HONORIFIC_MIN_SIZE), int(fs_n * HONORIFIC_SCALE))
+    return get_pillow_font("Bold", fs_n), get_pillow_font("Regular", fs_h)
+
+
+def fit_name_lines_pillow(draw: ImageDraw.ImageDraw, lines: list,
+                           base_px: float, max_w: float) -> float:
+    """最も幅の広い行が max_w を超える場合の一律縮小率（NAME_FIT_MIN 以上）。収まれば 1.0。"""
+    if not lines:
+        return 1.0
+    font_n, font_h = _name_fonts(base_px)
+    widest = max(
+        sum(get_text_size(draw, t, font_h if hon else font_n)[0] for t, hon in line)
+        for line in lines
+    )
+    if widest <= max_w or widest <= 0:
+        return 1.0
+    return max(NAME_FIT_MIN, max_w / widest)
+
+
+def draw_name_block_pillow(draw: ImageDraw.ImageDraw, lines: list, fit: float,
+                            base_px: float, right_edge: int, y: int,
+                            advance: float, fill: tuple = DARK_BROWN) -> int:
+    """
+    氏名ブロックを右寄せで描画する（1行 = 1名・本体と敬称は下端揃え）。
+    lines: parse_name_block() の結果。fit: 計測済みの縮小率（再計算しない）。
+    base_px: fit 適用前の氏名フォントサイズ。advance: 行送り倍率。
+    返値: 消費高さ（LayoutEngine の Pillow 計測と同じ式）
+    """
+    if not lines:
+        return 0
+    font_n, font_h = _name_fonts(base_px * fit)
+    _, nm_h = get_text_size(draw, "あ", font_n)
+    _, hn_h = get_text_size(draw, " 先生", font_h)
+    line_h = max(nm_h, hn_h)
+    line_px = int(line_h * advance)
+    cur_y = y
+    for line in lines:
+        widths = [get_text_size(draw, t, font_h if hon else font_n)[0] for t, hon in line]
+        for i, (text, hon) in enumerate(line):
+            x = right_edge - sum(widths[i:])
+            font = font_h if hon else font_n
+            h = hn_h if hon else nm_h
+            draw.text((x, cur_y + (line_h - h)), text, fill=fill, font=font)
+        cur_y += line_px
+    return line_px * len(lines)
+
+
 # ─── 左カラム: 司会・座長 ─────────────────────────────────────────────────
 
 def draw_mc_section(draw: ImageDraw.ImageDraw,
@@ -365,7 +421,7 @@ def draw_mc_section(draw: ImageDraw.ImageDraw,
     司会/座長セクションを描画。
       [バッジ]
       所属
-      氏名 先生
+      氏名（敬称込み・複数名可）
     返値: 使用した高さ
     """
     cur_y = y
@@ -382,27 +438,24 @@ def draw_mc_section(draw: ImageDraw.ImageDraw,
     _draw_pill(draw, x, cur_y, badge_w, badge_h, theme["accent"], badge_label, font_b, WHITE)
     cur_y += badge_h + int(fs_badge * 0.7)
 
-    # 所属
-    font_aff = get_pillow_font("Regular", fs_aff)
-    lines = wrap_text_jp(draw, person.affiliation, font_aff, w)
+    # 所属（ユーザー指定倍率）
+    us_aff = clamp_user_scale(getattr(person, "affiliation_scale", 1.0))
+    us_name = clamp_user_scale(getattr(person, "name_scale", 1.0))
+    font_aff = get_pillow_font("Regular", max(1, int(fs_aff * us_aff)))
+    lines = wrap_text_jp(draw, person.affiliation or "", font_aff, w)
     h_aff = draw_text_multiline(draw, lines, font_aff, x, cur_y, DARK_BROWN, 1.2)
-    cur_y += h_aff + int(fs_aff * 0.5)
+    cur_y += h_aff + int(fs_aff * us_aff * 0.5)
 
-    # 氏名（太字）+ 先生（レギュラー・小さめ）を右寄せで組み合わせ描画
-    font_nm = get_pillow_font("Bold", fs_name)
-    fs_sensei = max(8, int(fs_name * 0.85))
-    font_sensei = get_pillow_font("Regular", fs_sensei)
-    right_margin = int(fs_name * 1.0)
-    right_edge = x + w - right_margin
-    nm_w, nm_h = get_text_size(draw, person.name, font_nm)
-    ss_w, ss_h = get_text_size(draw, " 先生", font_sensei)
-    line_h = max(nm_h, ss_h)
-    draw.text((right_edge - nm_w - ss_w, cur_y + (line_h - nm_h)),
-              person.name, fill=DARK_BROWN, font=font_nm)
-    draw.text((right_edge - ss_w, cur_y + (line_h - ss_h)),
-              " 先生", fill=DARK_BROWN, font=font_sensei)
-    h_nm = int(line_h * 1.2)
-    cur_y += h_nm
+    # 氏名（入力どおり。改行で複数名・敬称は小さめ・幅超過時は一律縮小）
+    name_lines = parse_name_block(person.name)
+    if name_lines:
+        base_px = fs_name * us_name
+        right_margin = int(base_px * NAME_MC_RIGHT_MARGIN)
+        fit = fit_name_lines_pillow(draw, name_lines, base_px, w - right_margin)
+        cur_y += draw_name_block_pillow(
+            draw, name_lines, fit, base_px, x + w - right_margin, cur_y,
+            NAME_LINE_ADVANCE_MC,
+        )
 
     return cur_y - y
 
@@ -674,37 +727,14 @@ def draw_content_title(draw: ImageDraw.ImageDraw,
 
 def draw_presenter(draw: ImageDraw.ImageDraw,
                     x: int, y: int, w: int,
-                    affiliation: str, name: str,
-                    fs_aff: int, fs_name: int) -> int:
-    """所属・氏名（氏名 先生）を描画。返値: 消費高さ"""
-    font_a = get_pillow_font("Regular", fs_aff)
-    font_n = get_pillow_font("Bold", fs_name)
-    cur_y = y
-
-    lines = wrap_text_jp(draw, affiliation, font_a, w)
-    h1 = draw_text_multiline(draw, lines, font_a, x, cur_y, DARK_BROWN, 1.25,
-                              align="right", max_w=w)
-    cur_y += h1
-
-    # 氏名（太字）+ 先生（レギュラー・小さめ）を右寄せで組み合わせ描画
-    if name and not name.endswith("先生"):
-        fs_sensei = max(8, int(fs_name * 0.85))
-        font_sensei = get_pillow_font("Regular", fs_sensei)
-        nm_w, nm_h = get_text_size(draw, name, font_n)
-        ss_w, ss_h = get_text_size(draw, " 先生", font_sensei)
-        line_h = max(nm_h, ss_h)
-        draw.text((x + w - nm_w - ss_w, cur_y + (line_h - nm_h)),
-                  name, fill=DARK_BROWN, font=font_n)
-        draw.text((x + w - ss_w, cur_y + (line_h - ss_h)),
-                  " 先生", fill=DARK_BROWN, font=font_sensei)
-        h2 = int(line_h * 1.25)
-    else:
-        lines = wrap_text_jp(draw, name, font_n, w)
-        h2 = draw_text_multiline(draw, lines, font_n, x, cur_y, DARK_BROWN, 1.25,
-                                  align="right", max_w=w)
-    cur_y += h2
-
-    return cur_y - y
+                    name_lines: list, fit: float, fs_name: float,
+                    advance: float) -> int:
+    """
+    発表者氏名を右寄せで描画（所属は title/affiliation ブロックで描画済み）。
+    name_lines / fit は LayoutEngine の name ブロックの値をそのまま渡す。
+    返値: 消費高さ
+    """
+    return draw_name_block_pillow(draw, name_lines, fit, fs_name, x + w, y, advance)
 
 
 # ─── 装飾イラスト ──────────────────────────────────────────────────────────

@@ -15,6 +15,7 @@ from typing import List
 from PIL import Image, ImageDraw
 from reportlab.pdfbase import pdfmetrics
 
+from poster.name_utils import parse_name_block
 from poster.text_utils import get_text_size, wrap_text_jp
 from utils.font_manager import get_pillow_font
 
@@ -98,6 +99,32 @@ FS_PROG_BADGE  = 0.017   # 小バッジ文字
 FS_PROG_TITLE  = 0.024   # 発表タイトル
 FS_PRESENTER   = 0.018   # 所属
 FS_PRES_NAME   = 0.022   # 発表者氏名
+FS_PROG_SUBTITLE = 0.019 # 発表サブタイトル（タイトルの約 0.8 倍）
+
+# ─── ユーザー指定の文字サイズ倍率・氏名描画 ──────────────────────────────
+
+USER_FONT_SCALE_MIN = 0.5    # ユーザー指定倍率の下限（50%）
+USER_FONT_SCALE_MAX = 1.5    # ユーザー指定倍率の上限（150%）
+HONORIFIC_SCALE     = 0.85   # 敬称（先生・様など）の氏名本体に対するサイズ比
+NAME_FIT_MIN        = 0.6    # 氏名が幅に収まらない場合の自動縮小の下限倍率
+
+
+def clamp_user_scale(value) -> float:
+    """ユーザー指定の文字サイズ倍率を有効範囲に丸める。不正値・None は 1.0。"""
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return 1.0
+    if v != v:  # NaN
+        return 1.0
+    return max(USER_FONT_SCALE_MIN, min(USER_FONT_SCALE_MAX, v))
+
+
+HONORIFIC_MIN_SIZE      = 8.0    # 敬称フォントサイズの下限（pt / px）
+NAME_LINE_ADVANCE_PROG  = 1.25   # プログラム発表者名の行送り（行高 = max(氏名高, 敬称高) × この値）
+NAME_LINE_ADVANCE_MC    = 1.2    # 左カラム（総合司会・座長）氏名の行送り
+NAME_MC_RIGHT_MARGIN    = 1.0    # 左カラム氏名の右マージン（fit 前の氏名サイズ × この値）
+PROG_SUBTITLE_SPACING   = 1.35   # サブタイトルの行間
 FS_SANSHUUHI   = 0.030   # 参加費無料
 
 FS_V_TITLE     = 0.090   # 縦書きタイトル文字 (正規化高さ)
@@ -130,10 +157,95 @@ BADGE_AUD_H = 0.022   # 対象バッジ高さ
 @dataclass
 class Block:
     """配置済みブロック（正規化座標）"""
-    kind: str   # "section_time"|"sub_badge"|"title"|"affiliation"|"name"|"gap"
+    kind: str   # "section_time"|"sub_badge"|"title"|"subtitle"|"affiliation"|"name"|"gap"
     y: float    # トップ Y (正規化)
     h: float    # 高さ (正規化)
     data: dict = field(default_factory=dict)
+
+
+# ─── 氏名ブロックの計測（ReportLab メトリクス） ─────────────────────────────
+# LayoutEngine(use_reportlab=True) の高さ計測と svg_renderer の描画が
+# 同じ関数を通ることで、数式のズレを防ぐ。
+
+_RL_NAME_FONT = "BIZUDGothic-Bold"     # 氏名本体（計測用）
+_RL_HONORIFIC_FONT = "BIZUDGothic-Regular"  # 敬称（計測用）
+
+
+@dataclass
+class NameBlockMetrics:
+    """氏名ブロックの描画寸法（ReportLab 単位）。"""
+    lines: list          # [[(text, is_honorific), ...], ...]
+    fit: float           # 幅超過時の一律縮小率（収まれば 1.0）
+    name_size: float     # 氏名本体のフォントサイズ（fit 適用後）
+    hon_size: float      # 敬称のフォントサイズ（fit 適用後）
+    name_asc: float
+    name_h: float        # 氏名本体の文字高（ascent - descent）
+    hon_asc: float
+    hon_h: float
+    line_h: float        # 1行の文字高 = max(name_h, hon_h)（行送りはこれ × advance）
+    seg_widths: list     # [[w, ...], ...]  各セグメント幅
+    line_widths: list    # [w, ...]          各行の合計幅
+
+
+def honorific_size(name_size: float) -> float:
+    """氏名本体サイズ → 敬称サイズ。"""
+    return max(HONORIFIC_MIN_SIZE, name_size * HONORIFIC_SCALE)
+
+
+def _rl_seg_widths(lines, name_size: float, hon_size: float) -> list:
+    return [
+        [
+            pdfmetrics.stringWidth(
+                text,
+                _RL_HONORIFIC_FONT if is_hon else _RL_NAME_FONT,
+                hon_size if is_hon else name_size,
+            )
+            for text, is_hon in line
+        ]
+        for line in lines
+    ]
+
+
+def rl_name_fit(lines, base_size: float, max_w: float) -> float:
+    """最も幅の広い行が max_w を超える場合の一律縮小率（NAME_FIT_MIN 以上）。収まれば 1.0。"""
+    if not lines:
+        return 1.0
+    widths = _rl_seg_widths(lines, base_size, honorific_size(base_size))
+    widest = max(sum(ws) for ws in widths)
+    if widest <= max_w or widest <= 0:
+        return 1.0
+    return max(NAME_FIT_MIN, max_w / widest)
+
+
+def rl_name_metrics(lines, base_size: float, fit: float) -> NameBlockMetrics:
+    """氏名ブロックの寸法を計算する（base_size は fit 適用前の氏名サイズ）。"""
+    name_size = base_size * fit
+    hon_size = honorific_size(name_size)
+    n_asc, n_desc = pdfmetrics.getAscentDescent(_RL_NAME_FONT, name_size)
+    h_asc, h_desc = pdfmetrics.getAscentDescent(_RL_HONORIFIC_FONT, hon_size)
+    name_h = n_asc - n_desc
+    hon_h = h_asc - h_desc
+    seg_widths = _rl_seg_widths(lines, name_size, hon_size)
+    return NameBlockMetrics(
+        lines=lines,
+        fit=fit,
+        name_size=name_size,
+        hon_size=hon_size,
+        name_asc=n_asc,
+        name_h=name_h,
+        hon_asc=h_asc,
+        hon_h=hon_h,
+        line_h=max(name_h, hon_h),
+        seg_widths=seg_widths,
+        line_widths=[sum(ws) for ws in seg_widths],
+    )
+
+
+def rl_name_block_height(metrics: NameBlockMetrics, advance: float) -> float:
+    """氏名ブロック全体の高さ（ReportLab 単位）。空なら 0。"""
+    if not metrics.lines:
+        return 0.0
+    return len(metrics.lines) * (metrics.line_h * advance)
 
 
 class LayoutEngine:
@@ -199,54 +311,90 @@ class LayoutEngine:
                     "scale": scale,
                 }))
 
+                # ユーザー指定倍率（旧データにも耐えるよう getattr。ここが唯一のクランプ箇所）
+                us_title = clamp_user_scale(getattr(item, "title_scale", 1.0))
+                us_sub = clamp_user_scale(getattr(item, "subtitle_scale", 1.0))
+                us_aff = clamp_user_scale(getattr(item, "affiliation_scale", 1.0))
+                us_name = clamp_user_scale(getattr(item, "name_scale", 1.0))
+
                 # タイトル（実測行高）
                 title_lines, title_h = self._measure_wrapped_block(
-                    text=item.title,
+                    text=item.title or "",
                     weight="Bold",
                     fs_norm=FS_PROG_TITLE,
                     scale=scale,
                     content_scale=cs,
                     line_spacing=1.35,
+                    user_scale=us_title,
                 )
                 blocks.append(Block("title", 0, title_h, {
                     "text": item.title,
                     "scale": scale,
                     "content_scale": cs,
+                    "user_scale": us_title,
                     "lines": title_lines,
+                }))
+
+                # サブタイトル（任意。空なら高さ 0）
+                subtitle = getattr(item, "subtitle", "") or ""
+                sub_lines, sub_h = self._measure_wrapped_block(
+                    text=subtitle,
+                    weight="Regular",
+                    fs_norm=FS_PROG_SUBTITLE,
+                    scale=scale,
+                    content_scale=cs,
+                    line_spacing=PROG_SUBTITLE_SPACING,
+                    user_scale=us_sub,
+                )
+                blocks.append(Block("subtitle", 0, sub_h, {
+                    "text": subtitle,
+                    "scale": scale,
+                    "content_scale": cs,
+                    "user_scale": us_sub,
+                    "lines": sub_lines,
                 }))
 
                 # 所属（実測行高）
                 aff_lines, aff_h = self._measure_wrapped_block(
-                    text=item.affiliation,
+                    text=item.affiliation or "",
                     weight="Regular",
                     fs_norm=FS_PRESENTER,
                     scale=scale,
                     content_scale=cs,
                     line_spacing=1.25,
+                    user_scale=us_aff,
                 )
                 blocks.append(Block("affiliation", 0, aff_h, {
                     "text": item.affiliation,
                     "scale": scale,
                     "content_scale": cs,
+                    "user_scale": us_aff,
                     "lines": aff_lines,
                 }))
 
-                # 氏名
-                name_h = self._measure_name_block(
-                    name=item.presenter_name,
+                # 氏名（入力どおり。改行で複数名・敬称は小さめ・幅超過時は一律縮小）
+                name_lines = parse_name_block(item.presenter_name)
+                name_h, fit = self._measure_name_block(
+                    lines=name_lines,
                     scale=scale,
                     content_scale=cs,
+                    user_scale=us_name,
                 )
                 blocks.append(Block("name", 0, name_h, {
                     "text": item.presenter_name,
                     "scale": scale,
                     "content_scale": cs,
+                    "user_scale": us_name,
+                    "lines": name_lines,
+                    "fit": fit,
                 }))
 
         return blocks
 
-    def _font_px(self, fs_norm: float, scale: float, content_scale: float = 1.0) -> int:
-        return max(1, int(fs_norm * self.canvas_h * scale * content_scale))
+    def _font_px(
+        self, fs_norm: float, scale: float, content_scale: float = 1.0, user_scale: float = 1.0
+    ) -> int:
+        return max(1, int(fs_norm * self.canvas_h * scale * content_scale * user_scale))
 
     # ── Pillow 計測（プレビュー用） ──────────────────────────────────────────
 
@@ -265,33 +413,50 @@ class LayoutEngine:
         scale: float,
         content_scale: float,
         line_spacing: float,
+        user_scale: float = 1.0,
     ) -> tuple[list[str], float]:
+        if not text:
+            return [], 0.0
         if self.use_reportlab:
-            return self._rl_measure_wrapped_block(text, weight, fs_norm, scale, content_scale, line_spacing)
-        font = get_pillow_font(weight, self._font_px(fs_norm, scale, content_scale))
+            return self._rl_measure_wrapped_block(
+                text, weight, fs_norm, scale, content_scale, line_spacing, user_scale
+            )
+        font = get_pillow_font(weight, self._font_px(fs_norm, scale, content_scale, user_scale))
         lines = wrap_text_jp(self._measure_draw, text, font, self.prog_w_px)
         h_px = self._measure_multiline_height(font, lines, line_spacing)
         return lines, (h_px / self.canvas_h)
 
-    def _measure_name_block(self, name: str, scale: float, content_scale: float) -> float:
+    def _measure_name_block(
+        self, lines: list, scale: float, content_scale: float, user_scale: float = 1.0
+    ) -> tuple[float, float]:
+        """氏名ブロックの (正規化高さ, fit) を返す。lines は parse_name_block() の結果。"""
+        if not lines:
+            return 0.0, 1.0
         if self.use_reportlab:
-            return self._rl_measure_name_block(name, scale, content_scale)
-        if not name:
-            return 0.0
+            return self._rl_measure_name_block(lines, scale, content_scale, user_scale)
 
-        fs_name = self._font_px(FS_PRES_NAME, scale, content_scale)
-        font_n = get_pillow_font("Bold", fs_name)
+        # Pillow 計測（旧プレビュー用。ReportLab 経路と同じ規則を Pillow メトリクスで適用）
+        draw = self._measure_draw
+        base_px = FS_PRES_NAME * self.canvas_h * scale * content_scale * user_scale
 
-        if not name.endswith("先生"):
-            fs_sensei = max(8, int(fs_name * 0.85))
-            font_sensei = get_pillow_font("Regular", fs_sensei)
-            _, nm_h = get_text_size(self._measure_draw, name, font_n)
-            _, ss_h = get_text_size(self._measure_draw, " 先生", font_sensei)
-            return int(max(nm_h, ss_h) * 1.25) / self.canvas_h
+        def fonts(px: float):
+            fs_n = max(1, int(px))
+            fs_h = max(int(HONORIFIC_MIN_SIZE), int(fs_n * HONORIFIC_SCALE))
+            return get_pillow_font("Bold", fs_n), get_pillow_font("Regular", fs_h)
 
-        lines = wrap_text_jp(self._measure_draw, name, font_n, self.prog_w_px)
-        h_px = self._measure_multiline_height(font_n, lines, 1.25)
-        return h_px / self.canvas_h
+        font_n, font_h = fonts(base_px)
+        widest = max(
+            sum(get_text_size(draw, t, font_h if hon else font_n)[0] for t, hon in line)
+            for line in lines
+        )
+        fit = 1.0
+        if widest > self.prog_w_px and widest > 0:
+            fit = max(NAME_FIT_MIN, self.prog_w_px / widest)
+            font_n, font_h = fonts(base_px * fit)
+        _, nm_h = get_text_size(draw, "あ", font_n)
+        _, ss_h = get_text_size(draw, " 先生", font_h)
+        line_px = int(max(nm_h, ss_h) * NAME_LINE_ADVANCE_PROG)
+        return (line_px * len(lines)) / self.canvas_h, fit
 
     # ── ReportLab 計測（SVG レンダラー用） ──────────────────────────────────
 
@@ -326,8 +491,9 @@ class LayoutEngine:
         scale: float,
         content_scale: float,
         line_spacing: float,
+        user_scale: float = 1.0,
     ) -> tuple[list[str], float]:
-        size = fs_norm * self.canvas_h * scale * content_scale
+        size = fs_norm * self.canvas_h * scale * content_scale * user_scale
         rl_font = self._RL_GOTHIC_BOLD if weight in ("Bold", "Black") else self._RL_GOTHIC
         lines = self._rl_wrap(text, rl_font, size, self.prog_w_pt)
         if not lines:
@@ -336,15 +502,15 @@ class LayoutEngine:
         h = ch * line_spacing * len(lines)
         return lines, h / self.canvas_h
 
-    def _rl_measure_name_block(self, name: str, scale: float, content_scale: float) -> float:
-        if not name:
-            return 0.0
-        fs_name = FS_PRES_NAME * self.canvas_h * scale * content_scale
-        fs_sensei = max(8.0, fs_name * 0.85)
-        nm_h = self._rl_ch(self._RL_GOTHIC_BOLD, fs_name)
-        ss_h = self._rl_ch(self._RL_GOTHIC, fs_sensei)
-        line_h = max(nm_h, ss_h) * 1.25
-        return line_h / self.canvas_h
+    def _rl_measure_name_block(
+        self, lines: list, scale: float, content_scale: float, user_scale: float = 1.0
+    ) -> tuple[float, float]:
+        if not lines:
+            return 0.0, 1.0
+        base = FS_PRES_NAME * self.canvas_h * scale * content_scale * user_scale
+        fit = rl_name_fit(lines, base, self.prog_w_pt)
+        metrics = rl_name_metrics(lines, base, fit)
+        return rl_name_block_height(metrics, NAME_LINE_ADVANCE_PROG) / self.canvas_h, fit
 
     def _assign_y(self, blocks: List[Block]) -> List[Block]:
         """Y座標を順番に割り当てる"""

@@ -20,6 +20,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from poster.models import PosterData, Section, ContentItem, PersonInfo
 from poster.email_text import build_announcement_email_text
+from poster.layout import USER_FONT_SCALE_MIN, USER_FONT_SCALE_MAX
+from utils.state_migration import migrate_saved_state
 from themes.color_themes import THEMES, get_theme, rgb_to_hex, hex_to_rgb
 from utils.font_manager import ensure_fonts, ensure_fontconfig_fonts
 
@@ -140,6 +142,42 @@ def list_assets(directory: Path, exts=(".png", ".jpg", ".jpeg")) -> list:
         return []
     return sorted([f.name for f in directory.iterdir() if f.suffix.lower() in exts])
 
+# ─── 文字サイズ（%）ヘルパー ─────────────────────────────────────────────
+
+_SIZE_PCT_MIN = int(round(USER_FONT_SCALE_MIN * 100))
+_SIZE_PCT_MAX = int(round(USER_FONT_SCALE_MAX * 100))
+_SIZE_PCT_DEFAULT = 100
+
+_SENSEI_INFO = (
+    "敬称（先生・様など）は自動では付きません。氏名欄に含めて入力してください。"
+    "文字が変な位置で折り返す場合は、改行を入れるか『サイズ%』を調整してください。"
+)
+_NAME_PLACEHOLDER = "山田 太郎 先生"
+_NAME_HELP = "敬称（先生・様など）も含めて入力してください。複数名は改行で区切ります"
+
+
+def _clamp_pct(value) -> int:
+    """％値を int にして 50〜150 に丸める。None・文字列・不正値は 100。"""
+    try:
+        pct = int(round(float(value)))
+    except (TypeError, ValueError, OverflowError):
+        return _SIZE_PCT_DEFAULT
+    return max(_SIZE_PCT_MIN, min(_SIZE_PCT_MAX, pct))
+
+
+def _pct_to_scale(value) -> float:
+    """％値（None・文字列・範囲外可）を倍率（1.0 = 100%）に変換する。"""
+    return _clamp_pct(value) / 100.0
+
+
+def _size_input(value, key: str) -> int:
+    """文字サイズ％の number_input（共通設定）。"""
+    return st.number_input(
+        "サイズ%", min_value=_SIZE_PCT_MIN, max_value=_SIZE_PCT_MAX,
+        value=_clamp_pct(value), step=5, key=key,
+    )
+
+
 # ─── ヘッダー ─────────────────────────────────────────────────────────────
 
 st.title("🏥 GPI Poster Maker")
@@ -153,8 +191,9 @@ _SAVE_KEYS = [
     "event_date", "event_date_iso", "time_range",
     "venue_room", "venue_building", "venue_address",
     "registration_url", "zoom_note",
-    "has_mc", "mc_affiliation", "mc_name",
+    "has_mc", "mc_affiliation", "mc_name", "mc_aff_size", "mc_name_size",
     "has_chair", "chair_label", "chair_affiliation", "chair_name",
+    "chair_aff_size", "chair_name_size",
     "audience", "extra_audience",
     "num_sections", "sections",
     "bg_opacity", "selected_bg", "selected_decos",
@@ -166,7 +205,7 @@ _SAVE_KEYS = [
 
 def _export_state() -> bytes:
     """セッションステートを JSON バイト列にシリアライズ"""
-    payload = {"_version": "1.1"}
+    payload = {"_version": "1.2"}
     for k in _SAVE_KEYS:
         payload[k] = st.session_state.get(k)
     return json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
@@ -176,6 +215,10 @@ def _import_state(data: bytes):
     """JSON バイト列をセッションステートに反映（不明キーは無視）"""
     try:
         payload = json.loads(data.decode("utf-8"))
+        if not isinstance(payload, dict):
+            raise ValueError("保存データの形式が正しくありません")
+        # 旧バージョン（自動で「先生」を付けていた版）のデータを現行仕様へ変換
+        payload = migrate_saved_state(payload)
     except Exception as e:
         st.sidebar.error(f"読み込みエラー: {e}")
         return
@@ -274,10 +317,14 @@ def init_state():
         "has_mc": True,
         "mc_affiliation": "岐阜大学医学部附属病院 小児科",
         "mc_name": "",
+        "mc_aff_size": 100,
+        "mc_name_size": 100,
         "has_chair": False,
         "chair_label": "特別講演 座長",
         "chair_affiliation": "",
         "chair_name": "",
+        "chair_aff_size": 100,
+        "chair_name_size": 100,
         "audience": ["学生", "初期研修医", "後期研修医", "小児科医"],
         "extra_audience": "",
         "num_sections": 3,
@@ -307,8 +354,8 @@ def _default_sections():
             "time_start": "19:00",
             "time_end": "19:20",
             "contents": [
-                {"badge": "症例報告1（10分）", "title": "", "affiliation": "", "name": ""},
-                {"badge": "症例報告2（10分）", "title": "", "affiliation": "", "name": ""},
+                {"badge": "症例報告1（10分）", "title": "", "subtitle": "", "affiliation": "", "name": "", "title_size": 100, "subtitle_size": 100, "aff_size": 100, "name_size": 100},
+                {"badge": "症例報告2（10分）", "title": "", "subtitle": "", "affiliation": "", "name": "", "title_size": 100, "subtitle_size": 100, "aff_size": 100, "name_size": 100},
             ],
         },
         {
@@ -316,7 +363,7 @@ def _default_sections():
             "time_start": "19:20",
             "time_end": "19:40",
             "contents": [
-                {"badge": "国内留学日誌（15分）", "title": "", "affiliation": "", "name": ""},
+                {"badge": "国内留学日誌（15分）", "title": "", "subtitle": "", "affiliation": "", "name": "", "title_size": 100, "subtitle_size": 100, "aff_size": 100, "name_size": 100},
             ],
         },
         {
@@ -324,7 +371,7 @@ def _default_sections():
             "time_start": "19:40",
             "time_end": "20:30",
             "contents": [
-                {"badge": "特別講演（50分）", "title": "", "affiliation": "", "name": ""},
+                {"badge": "特別講演（50分）", "title": "", "subtitle": "", "affiliation": "", "name": "", "title_size": 100, "subtitle_size": 100, "aff_size": 100, "name_size": 100},
             ],
         },
     ]
@@ -388,10 +435,18 @@ def _build_poster_data(uploaded_bg=None, uploaded_decos_files=None) -> PosterDat
     # 司会・座長
     mc = None
     if ss["has_mc"] and ss["mc_name"]:
-        mc = PersonInfo(ss["mc_affiliation"], ss["mc_name"])
+        mc = PersonInfo(
+            ss["mc_affiliation"], ss["mc_name"],
+            affiliation_scale=_pct_to_scale(ss.get("mc_aff_size")),
+            name_scale=_pct_to_scale(ss.get("mc_name_size")),
+        )
     chair = None
     if ss["has_chair"] and ss["chair_name"]:
-        chair = PersonInfo(ss["chair_affiliation"], ss["chair_name"])
+        chair = PersonInfo(
+            ss["chair_affiliation"], ss["chair_name"],
+            affiliation_scale=_pct_to_scale(ss.get("chair_aff_size")),
+            name_scale=_pct_to_scale(ss.get("chair_name_size")),
+        )
 
     # プログラムセクション
     sections = []
@@ -404,6 +459,11 @@ def _build_poster_data(uploaded_bg=None, uploaded_decos_files=None) -> PosterDat
                     title=item.get("title", ""),
                     affiliation=item.get("affiliation", ""),
                     presenter_name=item.get("name", ""),
+                    subtitle=item.get("subtitle", ""),
+                    title_scale=_pct_to_scale(item.get("title_size")),
+                    subtitle_scale=_pct_to_scale(item.get("subtitle_size")),
+                    affiliation_scale=_pct_to_scale(item.get("aff_size")),
+                    name_scale=_pct_to_scale(item.get("name_size")),
                 ))
         sections.append(Section(
             label=sec_data["label"],
@@ -544,6 +604,7 @@ elif step == "3. Zoom / QR コード":
 
 elif step == "4. 司会・座長":
     st.header("Step 4　総合司会・座長")
+    st.info(_SENSEI_INFO)
 
     col1, col2 = st.columns(2)
     with col1:
@@ -552,14 +613,26 @@ elif step == "4. 司会・座長":
             "総合司会あり", value=st.session_state["has_mc"]
         )
         if st.session_state["has_mc"]:
-            st.session_state["mc_affiliation"] = st.text_input(
-                "所属", value=st.session_state["mc_affiliation"],
-                key="mc_aff"
-            )
-            st.session_state["mc_name"] = st.text_input(
-                "氏名", value=st.session_state["mc_name"],
-                key="mc_nm"
-            )
+            a1, a2 = st.columns([5, 2])
+            with a1:
+                st.session_state["mc_affiliation"] = st.text_area(
+                    "所属", value=st.session_state["mc_affiliation"],
+                    key="mc_aff", height=70,
+                    help="改行したい場合はEnterを押してください"
+                )
+            with a2:
+                st.session_state["mc_aff_size"] = _size_input(
+                    st.session_state.get("mc_aff_size"), "mc_aff_size_w")
+            n1, n2 = st.columns([5, 2])
+            with n1:
+                st.session_state["mc_name"] = st.text_area(
+                    "氏名", value=st.session_state["mc_name"],
+                    key="mc_nm", height=70,
+                    placeholder=_NAME_PLACEHOLDER, help=_NAME_HELP
+                )
+            with n2:
+                st.session_state["mc_name_size"] = _size_input(
+                    st.session_state.get("mc_name_size"), "mc_name_size_w")
 
     with col2:
         st.subheader("座長")
@@ -571,14 +644,26 @@ elif step == "4. 司会・座長":
                 "バッジラベル", value=st.session_state["chair_label"],
                 key="ch_lbl"
             )
-            st.session_state["chair_affiliation"] = st.text_input(
-                "所属", value=st.session_state["chair_affiliation"],
-                key="ch_aff"
-            )
-            st.session_state["chair_name"] = st.text_input(
-                "氏名", value=st.session_state["chair_name"],
-                key="ch_nm"
-            )
+            a1, a2 = st.columns([5, 2])
+            with a1:
+                st.session_state["chair_affiliation"] = st.text_area(
+                    "所属", value=st.session_state["chair_affiliation"],
+                    key="ch_aff", height=70,
+                    help="改行したい場合はEnterを押してください"
+                )
+            with a2:
+                st.session_state["chair_aff_size"] = _size_input(
+                    st.session_state.get("chair_aff_size"), "chair_aff_size_w")
+            n1, n2 = st.columns([5, 2])
+            with n1:
+                st.session_state["chair_name"] = st.text_area(
+                    "氏名", value=st.session_state["chair_name"],
+                    key="ch_nm", height=70,
+                    placeholder=_NAME_PLACEHOLDER, help=_NAME_HELP
+                )
+            with n2:
+                st.session_state["chair_name_size"] = _size_input(
+                    st.session_state.get("chair_name_size"), "chair_name_size_w")
 
 # ─── ステップ 5: 対象 ─────────────────────────────────────────────────────
 
@@ -616,6 +701,7 @@ elif step == "5. 対象":
 
 elif step == "6. プログラム":
     st.header("Step 6　プログラム")
+    st.info(_SENSEI_INFO)
 
     num_sec = st.number_input(
         "部の数", min_value=1, max_value=4,
@@ -629,7 +715,7 @@ elif step == "6. プログラム":
             "label": f"第{len(st.session_state['sections']) + 1}部",
             "time_start": "19:00",
             "time_end": "19:30",
-            "contents": [{"badge": "発表1", "title": "", "affiliation": "", "name": ""}],
+            "contents": [{"badge": "発表1", "title": "", "subtitle": "", "affiliation": "", "name": "", "title_size": 100, "subtitle_size": 100, "aff_size": 100, "name_size": 100}],
         })
 
     for i in range(num_sec):
@@ -657,34 +743,54 @@ elif step == "6. プログラム":
                 value=len(sec["contents"]), key=f"ni_{i}"
             )
             while len(sec["contents"]) < num_items:
-                sec["contents"].append({"badge": "発表", "title": "", "affiliation": "", "name": ""})
+                sec["contents"].append({"badge": "発表", "title": "", "subtitle": "", "affiliation": "", "name": "", "title_size": 100, "subtitle_size": 100, "aff_size": 100, "name_size": 100})
 
             for j in range(num_items):
                 item = sec["contents"][j]
                 st.markdown(f"**発表 {j + 1}**")
-                c1, c2 = st.columns([1, 2])
-                with c1:
-                    item["badge"] = st.text_input(
-                        "バッジラベル",
-                        value=item["badge"],
-                        key=f"badge_{i}_{j}",
-                        help="例: 症例報告1（10分）/ 特別講演（50分）"
-                    )
-                with c2:
+                item["badge"] = st.text_input(
+                    "バッジラベル",
+                    value=item["badge"],
+                    key=f"badge_{i}_{j}",
+                    help="例: 症例報告1（10分）/ 特別講演（50分）"
+                )
+                t1, t2 = st.columns([5, 1])
+                with t1:
                     item["title"] = st.text_area(
                         "タイトル", value=item["title"],
                         key=f"title_{i}_{j}", height=70
                     )
-                c3, c4 = st.columns(2)
-                with c3:
+                with t2:
+                    item["title_size"] = _size_input(
+                        item.get("title_size"), f"title_sz_{i}_{j}")
+                s1, s2 = st.columns([5, 1])
+                with s1:
+                    item["subtitle"] = st.text_area(
+                        "サブタイトル（任意）", value=item.get("subtitle", ""),
+                        key=f"subtitle_{i}_{j}", height=70,
+                        help="タイトルの下に小さめの文字で表示されます"
+                    )
+                with s2:
+                    item["subtitle_size"] = _size_input(
+                        item.get("subtitle_size"), f"subtitle_sz_{i}_{j}")
+                a1, a2 = st.columns([5, 1])
+                with a1:
                     item["affiliation"] = st.text_area(
                         "所属", value=item["affiliation"], key=f"aff_{i}_{j}",
                         height=70, help="改行したい場合はEnterを押してください"
                     )
-                with c4:
-                    item["name"] = st.text_input(
-                        "発表者名", value=item["name"], key=f"name_{i}_{j}"
+                with a2:
+                    item["aff_size"] = _size_input(
+                        item.get("aff_size"), f"aff_sz_{i}_{j}")
+                n1, n2 = st.columns([5, 1])
+                with n1:
+                    item["name"] = st.text_area(
+                        "発表者名", value=item["name"], key=f"name_{i}_{j}",
+                        height=70, placeholder=_NAME_PLACEHOLDER, help=_NAME_HELP
                     )
+                with n2:
+                    item["name_size"] = _size_input(
+                        item.get("name_size"), f"name_sz_{i}_{j}")
                 st.markdown("---")
 
         st.session_state["sections"][i] = sec

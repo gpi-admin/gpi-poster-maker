@@ -10,20 +10,17 @@ def _clean_text(text: str) -> str:
     return " ".join((text or "").strip().split())
 
 
-def _with_sensei(name: str) -> str:
-    n = _clean_text(name)
-    if not n:
-        return ""
-    if n.endswith("先生"):
-        return n
-    return f"{n} 先生"
+def _join_names(name: str) -> str:
+    """氏名は入力どおり使う（敬称は自動付与しない）。複数行は「、」で連結する。"""
+    lines = [_clean_text(line) for line in (name or "").splitlines()]
+    return "、".join(line for line in lines if line)
 
 
 def _format_person(person: PersonInfo | None) -> str:
     if person is None:
         return ""
     aff = _clean_text(person.affiliation)
-    name = _with_sensei(person.name)
+    name = _join_names(person.name)
     if aff and name:
         return f"{aff}　{name}"
     return aff or name
@@ -73,6 +70,9 @@ def build_announcement_email_text(data: PosterData) -> str:
                 lines.append(badge)
             if title:
                 lines.append(f"　{title}")
+            subtitle = _clean_text(getattr(item, "subtitle", ""))
+            if subtitle:
+                lines.append(f"　{subtitle}")
             if not badge and not title:
                 lines.append("発表")
             presenter_line = _format_person(

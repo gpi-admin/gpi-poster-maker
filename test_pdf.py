@@ -26,9 +26,13 @@ data = PosterData(
     zoom_note="&zoomミーティング",
     mc=PersonInfo(
         affiliation="岐阜大学医学部附属病院 小児科",
-        name="山田 太郎"
+        name="山田 太郎 先生\n佐藤 花子 先生",   # 敬称込み・改行で複数名
+        name_scale=0.9,
     ),
-    chair=None,
+    chair=PersonInfo(
+        affiliation="岐阜県総合医療センター\n小児科",
+        name="高橋 五郎 様",
+    ),
     audience=["学生", "初期研修医", "後期研修医", "小児科医"],
     sections=[
         Section(
@@ -40,13 +44,15 @@ data = PosterData(
                     badge_label="症例報告1（10分）",
                     title="発熱と皮疹を主訴に来院した2歳児の一例",
                     affiliation="岐阜大学医学部附属病院 小児科",
-                    presenter_name="田中 花子",
+                    presenter_name="田中 花子 先生\n伊藤 一郎 先生",   # 複数名
+                    title_scale=0.85,                               # 倍率 != 1
                 ),
                 ContentItem(
                     badge_label="症例報告2（10分）",
                     title="反復する腹痛を訴える学童期の男児",
                     affiliation="岐阜市民病院 小児科",
-                    presenter_name="佐藤 次郎",
+                    presenter_name="佐藤 次郎 様",                   # 「様」
+                    name_scale=1.2,
                 ),
             ],
         ),
@@ -59,7 +65,13 @@ data = PosterData(
                     badge_label="国内留学日誌（15分）",
                     title="東京大学小児科での研修を終えて",
                     affiliation="岐阜大学医学部附属病院 小児科",
-                    presenter_name="鈴木 三郎",
+                    presenter_name="鈴木 三郎 先生、渡辺 四郎 先生",   # 1行に2名
+                ),
+                ContentItem(
+                    badge_label="ミニレクチャー（5分）",
+                    title="外来で役立つ小児の皮膚診察",
+                    affiliation="岐阜赤十字病院 小児科",
+                    presenter_name="加藤 美咲",                      # 敬称なし
                 ),
             ],
         ),
@@ -72,7 +84,9 @@ data = PosterData(
                     badge_label="特別講演（50分）",
                     title="小児の発熱性疾患における最新の治療戦略と今後の展望について",
                     affiliation="名古屋大学医学部附属病院 小児科学教室",
-                    presenter_name="中村 四郎",
+                    presenter_name="長谷川 小百合子 先生、勅使河原 宏 先生",  # 長い氏名（fit）
+                    subtitle="〜エビデンスと臨床現場のギャップを埋めるために〜",
+                    title_scale=1.2,
                 ),
             ],
         ),

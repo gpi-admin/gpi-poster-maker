@@ -6,9 +6,17 @@ from typing import Optional, List
 class ContentItem:
     """各発表の情報"""
     badge_label: str       # バッジ表示テキスト e.g. "症例報告1（10分）"
-    title: str             # 発表タイトル
-    affiliation: str       # 所属機関
-    presenter_name: str    # 発表者名
+    title: str             # 発表タイトル（改行可）
+    affiliation: str       # 所属機関（改行可）
+    presenter_name: str    # 発表者名。敬称込みで入力されたまま描画する（自動で「先生」は付けない）。
+                           # 改行で複数名を入力可（1行 = 1名）。
+    subtitle: str = ""     # サブタイトル（任意・改行可）。タイトル直下に小さめで描画
+    # ユーザー指定の文字サイズ倍率（1.0 = 100%）。
+    # 有効範囲は layout.py の USER_FONT_SCALE_MIN / MAX でクランプされる。
+    title_scale: float = 1.0
+    subtitle_scale: float = 1.0        # 基準サイズ FS_PROG_SUBTITLE に対する倍率
+    affiliation_scale: float = 1.0
+    name_scale: float = 1.0
 
 
 @dataclass
@@ -23,8 +31,10 @@ class Section:
 @dataclass
 class PersonInfo:
     """司会・座長の情報"""
-    affiliation: str
-    name: str
+    affiliation: str       # 所属（改行可）
+    name: str              # 氏名。敬称込みで入力されたまま描画（改行で複数名可）
+    affiliation_scale: float = 1.0     # ユーザー指定の文字サイズ倍率（1.0 = 100%）
+    name_scale: float = 1.0
 
 
 @dataclass

@@ -56,8 +56,11 @@
 
 | 要素 | 変化の内容 | 注意点 |
 | --- | --- | --- |
-| **総合司会** | 所属・氏名が毎回変わる | 左カラムに配置。長い所属名は折り返し |
-| **特別講演座長** | 無い回もある（任意） | `chair = None` の時は非表示 |
+| **総合司会** | 所属・氏名が毎回変わる。氏名は敬称込みの自由入力で、改行で複数名を入力できる | 左カラムに配置。長い所属名は折り返し。氏名は折り返さず、幅を超える場合は自動縮小（13 章参照） |
+| **特別講演座長** | 無い回もある（任意）。氏名の扱いは総合司会と同じ | `chair = None` の時は非表示 |
+| **発表者氏名** | 敬称込みの自由入力（自動で「先生」は付かない）。改行で複数名（1行 = 1名）。行ごとに右寄せ | 敬称は氏名本体より小さく描画。幅超過時は自動縮小（13 章参照） |
+| **発表サブタイトル** | 任意。タイトル直下に小さめで描画。空なら高さ 0 | `ContentItem.subtitle` |
+| **文字サイズ倍率** | タイトル・サブタイトル・所属・氏名ごとにユーザーが 50〜150% で調整（司会・座長は所属・氏名） | 全体の自動縮小の上に掛かる（7 章参照） |
 | **第1部の内容** | 基本は「症例報告1（10分）」「症例報告2（10分）」の2本でほぼ固定 | タイトル長で行数が変わる |
 | **第2部の内容** | 「国内留学日誌（15分）」「中堅医師による病院紹介（15分）」等、内容が毎回変わる | 同上 |
 | **第3部（特別企画）の内容** | シンプル（講演1本）の時もあれば、レクチャー＆実習で複数発表者になる場合もある | 複数 ContentItem に対応済み |
@@ -104,12 +107,16 @@
 ```
 GPI_Poster_Maker/
 ├── app.py                    # Streamlit 7ステップフォーム
+├── test_svg.py               # 本番経路（SVG）のテスト → test_output_svg.png
 ├── GUIDELINES.md             # ← このファイル
 ├── CLAUDE.md                 # Claude Code 動作ルール
 ├── requirements.txt
 ├── poster/
-│   ├── models.py             # PosterData / Section / ContentItem
-│   ├── layout.py             # 正規化座標定数 + LayoutEngine
+│   ├── models.py             # PosterData / Section / ContentItem / PersonInfo
+│   ├── layout.py             # 正規化座標定数 + LayoutEngine + 氏名ブロック計測
+│   ├── name_utils.py         # 氏名文字列の解析（改行分割・敬称セグメント化。純 Python）
+│   ├── svg_renderer.py       # SVG 描画（本番経路。PNG / PDF の唯一のソース）
+│   ├── email_text.py         # 告知メール文面の生成
 │   ├── zoom_icon.py          # テーマ色 + 白ロゴの Zoom アイコン合成
 │   ├── preview_renderer.py   # Pillow プレビュー描画（96 DPI）
 │   ├── pdf_renderer.py       # PDF 出力（ベクター主体・テキスト編集可）
@@ -122,6 +129,7 @@ GPI_Poster_Maker/
 │   └── color_themes.py       # 12テーマ + カスタム定義（後方互換エイリアスあり）
 ├── utils/
 │   ├── font_manager.py       # Noto Sans JP 管理（自動DL・登録）
+│   ├── state_migration.py    # 保存データ（JSON）の旧バージョン変換
 │   └── image_utils.py        # 背景合成ユーティリティ
 └── assets/
     ├── fonts/NotoSansJP/     # Regular / Bold / Black (.otf)
@@ -231,17 +239,69 @@ Zoom セクション用定数（`layout.py`）:
 | `section_time` | セクション時刻ヘッダー（"19:00 - 19:20"） |
 | `sub_badge` | 発表種別バッジ（"症例報告1（10分）"） |
 | `title` | 発表タイトル（長文は自動折り返し） |
+| `subtitle` | 発表サブタイトル（`title` の直後に必ず 1 つ存在。空なら高さ 0） |
 | `affiliation` | 所属機関 |
-| `name` | 発表者氏名 |
+| `name` | 発表者氏名（改行で複数行。行ごとに右寄せ） |
 | `gap` | セクション間・コンテンツ間スペース |
+
+**Block.data の主なキー:**
+
+| kind | キー |
+|------|------|
+| `title` / `subtitle` / `affiliation` | `text`, `scale`（全体の自動縮小）, `content_scale`（セクション別）, `user_scale`（ユーザー倍率・clamp 済み）, `lines`（実測した折り返し行） |
+| `name` | `text`, `scale`, `content_scale`, `user_scale`, `lines`（`parse_name_block` の結果。`[[(text, is_honorific), ...], ...]`）, `fit`（幅超過時の縮小率。収まれば 1.0） |
+
+レンダラー（SVG / 旧 Pillow / 旧 ReportLab）はこの Block 契約に従って描画する。
+
+**フォントサイズ定数（`layout.py`、正規化高さ）:**
+
+| 定数 | 値 | 用途 |
+|------|-----|------|
+| `FS_PROG_TITLE` | 0.024 | 発表タイトル |
+| `FS_PROG_SUBTITLE` | 0.019 | 発表サブタイトル（タイトルの約 0.8 倍） |
+| `FS_PRESENTER` | 0.018 | 所属 |
+| `FS_PRES_NAME` | 0.022 | 発表者氏名。プログラム発表者名と司会/座長名（`FS_MC_NAME`）の双方で同値 |
+
+**氏名・文字サイズ関連の定数（`layout.py`）:**
+
+| 定数 | 値 | 説明 |
+|------|-----|------|
+| `USER_FONT_SCALE_MIN` / `USER_FONT_SCALE_MAX` | 0.5 / 1.5 | ユーザー指定倍率の有効範囲（`clamp_user_scale` で丸める。不正値・None は 1.0） |
+| `HONORIFIC_SCALE` | 0.85 | 敬称の氏名本体に対するサイズ比 |
+| `HONORIFIC_MIN_SIZE` | 8.0 | 敬称フォントサイズの下限（pt / px） |
+| `NAME_FIT_MIN` | 0.6 | 氏名が幅に収まらない場合の自動縮小の下限倍率 |
+| `NAME_LINE_ADVANCE_PROG` | 1.25 | プログラム発表者名の行送り（行高 × この値） |
+| `NAME_LINE_ADVANCE_MC` | 1.2 | 左カラム（総合司会・座長）氏名の行送り |
+| `NAME_MC_RIGHT_MARGIN` | 1.0 | 左カラム氏名の右マージン（fit 前の氏名サイズ × この値） |
+| `PROG_SUBTITLE_SPACING` | 1.35 | サブタイトルの行間（タイトルも 1.35、所属は 1.25） |
+
+**文字サイズの決まり方:**
+
+```
+実フォントサイズ = 基準定数 × キャンバス高さ × scale × content_scale × user_scale
+```
+
+- `scale`: 全体の自動縮小（1.0 → 0.70）
+- `content_scale`: `SECTION_CONTENT_SCALES`（セクション別）
+- `user_scale`: `ContentItem.title_scale / subtitle_scale / affiliation_scale / name_scale`（1.0 = 100%）。`LayoutEngine` が `clamp_user_scale` で 0.5〜1.5 に丸める唯一の箇所
+- 氏名ではさらに幅超過時の `fit`（下限 `NAME_FIT_MIN`）が掛かる
 
 **高さ計算は「実測」ベース:**
 
-- `LayoutEngine` は `render_scale` ごとの仮想キャンバス（`PREVIEW_W/H * render_scale`）を前提に高さを計算する。
-- `title` / `affiliation` は `wrap_text_jp` で実際の折り返し行を作成し、`draw_text_multiline` と同じ `line_spacing`（タイトル 1.35、所属 1.25）で高さを計測する。
-- `name` は `draw_presenter(..., affiliation=\"\", name=...)` と同じロジック（`先生` 接尾の扱い含む）で1行/複数行高さを計測する。
-- 氏名サイズ基準は `FS_PRES_NAME = 0.022`。この値をプログラム発表者名と司会/座長名の双方に適用する。
+- `LayoutEngine` は `render_scale` ごとの仮想キャンバス（`PREVIEW_W/H * render_scale`）を前提に高さを計算する。`use_reportlab=True` の場合は ReportLab（BIZ UD Gothic）メトリクスで計測する（SVG レンダラーが使用）。
+- `title` / `subtitle` / `affiliation` は実際の折り返し行（`wrap_text_jp` 相当）を作成し、行間（タイトル 1.35、サブタイトル `PROG_SUBTITLE_SPACING`、所属 1.25）で高さを計測する。空文字の場合は行なし・高さ 0。
+- `name` は `parse_name_block` で行・セグメントに分解し、`rl_name_fit` で `fit` を決め、`rl_name_metrics` → `rl_name_block_height(metrics, NAME_LINE_ADVANCE_PROG)` で高さを求める。1 行の高さは `max(氏名本体の文字高, 敬称の文字高)`、行送りはこれに `NAME_LINE_ADVANCE_PROG` を掛けた値。
 - これにより、長いタイトルが複数行になっても所属行と重ならない。
+
+**氏名ブロックの計測・描画ヘルパー（`layout.py`）:**
+
+- `NameBlockMetrics`: `lines`, `fit`, `name_size`, `hon_size`, `name_asc`, `name_h`, `hon_asc`, `hon_h`, `line_h`, `seg_widths`, `line_widths`
+- `honorific_size(name_size)`: 敬称サイズ（`max(HONORIFIC_MIN_SIZE, name_size * HONORIFIC_SCALE)`）
+- `rl_name_fit(lines, base_size, max_w)`: 最も幅の広い行が `max_w` を超える場合の一律縮小率（`NAME_FIT_MIN` 以上、収まれば 1.0）
+- `rl_name_metrics(lines, base_size, fit)`: 寸法の算出（`base_size` は fit 適用前）
+- `rl_name_block_height(metrics, advance)`: ブロック全体の高さ（空なら 0）
+
+`svg_renderer.py` の `_draw_name_block` は `rl_name_metrics` の結果をそのまま使い、1 行 = 1 名・右寄せ・本体と敬称は下端揃えで描画する。総合司会・座長（`draw_person_row`）も同じヘルパーを通る。
 
 ---
 
@@ -352,19 +412,44 @@ Section
 
 ContentItem
 ├── badge_label: str    # "症例報告1（10分）"
-├── title, affiliation, presenter_name
+├── title: str          # 改行可
+├── affiliation: str    # 改行可
+├── presenter_name: str # 敬称込みの自由入力（自動で「先生」は付かない）。改行で複数名（1行 = 1名）
+├── subtitle: str = ""  # 任意・改行可。タイトル直下に小さめで描画
+└── title_scale / subtitle_scale / affiliation_scale / name_scale: float = 1.0
+                        # ユーザー指定の文字サイズ倍率（1.0 = 100%）。有効範囲 0.5〜1.5 は layout.py で clamp
+
+PersonInfo（総合司会・座長）
+├── affiliation: str    # 改行可
+├── name: str           # 敬称込みの自由入力。改行で複数名
+└── affiliation_scale / name_scale: float = 1.0
 ```
+
+氏名の解析（`poster/name_utils.py`、純 Python）:
+- `split_name_lines(name)`: 改行で分割し、各行を strip して空行を除く
+- `split_honorific_segments(line)`: 1 行を `(テキスト, 敬称か)` のセグメント列に分ける。敬称セグメントは `" 先生"` のように直前の空白を半角スペース 1 個に正規化した形
+- `parse_name_block(name)`: 行ごとのセグメント列のリスト
+- 敬称として認識するのは `HONORIFICS = ("先生", "様", "氏", "さん")` で、直前にスペース（半角/全角）が 1 つ以上あり、直後が行末・スペース・区切り文字（`、,，・/／）)`）のもの
+
+保存データ（JSON）は `_version: "1.2"`。変換処理は `utils/state_migration.py` の `migrate_saved_state`。
 
 ---
 
 ## 12. テスト方法
 
 ```bash
-# Pillow プレビュー確認
+# 本番経路（SVG → CairoSVG）の確認 ← アプリが実際に使う出力経路
+.venv/bin/python test_svg.py
+# → test_output_svg.png を目視確認
+#   氏名の敬称・複数名・自動縮小、サブタイトル、文字サイズ倍率を検証する。
+#   name_utils / clamp_user_scale の単体 assert と、LayoutEngine の Block 契約
+#   （subtitle の存在、name の lines / fit、ブロックが重ならず連続すること）の assert を含む
+
+# Pillow プレビュー確認（旧レンダラー）
 python3 test_preview.py
 # → test_output_preview.png を目視確認
 
-# PDF 出力確認
+# PDF 出力確認（旧 ReportLab レンダラー）
 python3 test_pdf.py
 # → test_output.pdf を Adobe Illustrator で開き、
 #   テキスト・図形が個別選択可能であることを確認
@@ -395,6 +480,18 @@ streamlit run app.py
 
 - **LayoutEngine の実測高さ計算**: タイトル・所属・氏名の高さは文字数推定ではなく実際の折り返し行で計測する。これにより、長文タイトル時でも所属と重ならない。
 
-- **Streamlit 保存/読み込み**: `_export_state()` / `_import_state()` は `with st.sidebar:` ブロックより**前**に定義する必要がある（実行順序の制約）。保存ファイルには `_version: "1.1"` を付与し、旧テーマキーは `_THEME_ALIASES` で自動変換する。
+- **Streamlit 保存/読み込み**: `_export_state()` / `_import_state()` は `with st.sidebar:` ブロックより**前**に定義する必要がある（実行順序の制約）。保存ファイルには `_version: "1.2"` を付与し、旧テーマキーは `_THEME_ALIASES` で自動変換する。
+
+- **保存データ v1.2 と旧データの「先生」補完**: v1.1 以前は描画時に氏名へ「先生」を自動付与していたが、v1.2 以降は氏名を入力どおり描画する。`_import_state()` は読み込み時に `migrate_saved_state`（`utils/state_migration.py`）を通し、`_version` が無い・1.2 未満・壊れている場合に限り、司会・座長・各発表の氏名の各非空行へ末尾が「先生」でなければ `" 先生"` を補完する（旧版と同じ見た目を保つため）。1.2 以上はそのまま。入力は変更せずコピーを返す。
+
+- **敬称は自動付与しない**: 氏名は敬称込みの自由入力。「先生」「様」などを勝手に足さない（`app.py` の入力欄の案内、`email_text.py` も同様）。メール文面は複数名を「、」で連結する。
+
+- **敬称の自動縮小の認識条件**: 敬称は氏名本体の `HONORIFIC_SCALE`（0.85）倍で描く。認識するのは「直前にスペース（半角/全角）が 1 つ以上あり、直後が行末・スペース・区切り文字」の `先生` / `様` / `氏` / `さん` のみ。スペースなしで続く場合（「山田太郎先生」）や語の一部（「山田 さんま」）は敬称扱いしない（通常サイズ）。
+
+- **氏名は折り返さず自動縮小**: 氏名は 1 行 = 1 名で折り返さない。最も幅の広い行が利用幅を超える場合、ブロック全体を一律に縮小する（`rl_name_fit`、下限 `NAME_FIT_MIN` = 0.6）。下限でも収まらない長さははみ出す（既知の制約）。総合司会・座長も同じルール。長すぎる場合は改行で名前を分けるか「サイズ%」を調整する。
+
+- **ユーザー倍率の clamp 位置**: プログラム内の文字サイズ倍率は `LayoutEngine` が `clamp_user_scale`（0.5〜1.5）で丸める。左カラム（総合司会・座長）は `LayoutEngine` を通らないため、`svg_renderer.py` の `draw_person_row` 側で丸める。`app.py` 側も入力を 50〜150% に丸める（`_pct_to_scale`）。
+
+- **計測と描画は `rl_name_metrics` を共有**: `LayoutEngine(use_reportlab=True)` の氏名高さ計測と `svg_renderer.py` の描画（`_draw_name_block`）は、同じ `rl_name_fit` / `rl_name_metrics` を通す。計算式を二重管理しないことで、計測と描画のズレ（重なり・余白不足）を防ぐ。`Block.data["fit"]` は計測時の値を描画でそのまま使う。
 
 - **パスワード認証（fail-close）**: `app.py` は起動直後に `_check_password()` を実行し、`st.secrets` に `password` / `passcode`（大文字・ネスト含む）が見つからない場合はアプリを停止する。WebApp で未設定時に無認証で使えてしまう状態を防ぐ設計。ローカルで一時的に無認証起動したい場合のみ環境変数 `GPI_ALLOW_UNLOCKED=1` を使う。

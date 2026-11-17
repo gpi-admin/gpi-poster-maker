@@ -58,11 +58,22 @@ from poster.layout import (
     FS_PROG_TITLE,
     FS_PRESENTER,
     FS_PRES_NAME,
+    FS_PROG_SUBTITLE,
     FS_SANSHUUHI,
     FS_V_TITLE,
+    NAME_LINE_ADVANCE_MC,
+    NAME_LINE_ADVANCE_PROG,
+    NAME_MC_RIGHT_MARGIN,
+    PROG_SUBTITLE_SPACING,
     SECTION_CONTENT_SCALES,
+    NameBlockMetrics,
+    clamp_user_scale,
+    rl_name_block_height,
+    rl_name_fit,
+    rl_name_metrics,
 )
 from poster.models import PosterData
+from poster.name_utils import parse_name_block
 from poster.qr_generator import generate_qr
 from poster.zoom_icon import build_zoom_icon
 from themes.color_themes import DARK_BROWN, WHITE, get_theme
@@ -434,6 +445,7 @@ def _draw_multiline(
     line_spacing: float,
     align: str = "left",
     max_w: float | None = None,
+    font_weight: str = "",
 ) -> float:
     if not lines:
         return 0.0
@@ -449,9 +461,39 @@ def _draw_multiline(
         else:
             lx = x
         baseline = cur_top + asc
-        c.text(line, lx, baseline, svg_font, size, color)
+        c.text(line, lx, baseline, svg_font, size, color, font_weight=font_weight)
         cur_top += line_h
     return line_h * len(lines)
+
+
+def _draw_name_block(
+    c: SVGCanvas,
+    metrics: NameBlockMetrics,
+    right_edge: float,
+    y_top: float,
+    advance: float,
+    svg_font: str,
+    color: tuple,
+):
+    """氏名ブロック（1行=1名・右寄せ・敬称は小さめ・本体と敬称は下端揃え）を描画する。
+
+    寸法は layout.rl_name_metrics() の結果をそのまま使う（LayoutEngine の計測と共通）。
+    """
+    m = metrics
+    cur_top = y_top
+    for line, widths in zip(m.lines, m.seg_widths):
+        name_top = cur_top + (m.line_h - m.name_h)
+        hon_top = cur_top + (m.line_h - m.hon_h)
+        for i, (text, is_hon) in enumerate(line):
+            # 右端から、このセグメント以降の幅を順に引いた位置が左端
+            x = right_edge
+            for w in widths[i:]:
+                x = x - w
+            if is_hon:
+                c.text(text, x, hon_top + m.hon_asc, svg_font, m.hon_size, color)
+            else:
+                c.text(text, x, name_top + m.name_asc, svg_font, m.name_size, color)
+        cur_top += m.line_h * advance
 
 
 def _draw_centered_in_box(
@@ -904,25 +946,29 @@ def render_poster_svg(
         )
         cur_y += badge_h2 + ph(FS_MC_BADGE) * 0.7
 
-        aff_lines = _wrap_jp(person.affiliation, _RL_GOTHIC, fs_mc_aff, lc_w)
-        aff_h = _draw_multiline(
-            c, aff_lines, lc_x, cur_y, _RL_GOTHIC, _SVG_GOTHIC, fs_mc_aff, DARK_BROWN, 1.2
-        )
-        cur_y += aff_h + fs_mc_aff * 0.5
+        # ユーザー指定倍率（左カラムは LayoutEngine を通らないためここでクランプ）
+        us_aff = clamp_user_scale(getattr(person, "affiliation_scale", 1.0))
+        us_name = clamp_user_scale(getattr(person, "name_scale", 1.0))
 
-        fs_sensei = max(8.0, fs_mc_name * 0.85)
-        nm_w = _tw(person.name, _RL_GOTHIC, fs_mc_name)
-        ss_w = _tw(" 先生", _RL_GOTHIC, fs_sensei)
-        nm_asc, _, nm_h = _fm(_RL_GOTHIC, fs_mc_name)
-        ss_asc, _, ss_h = _fm(_RL_GOTHIC, fs_sensei)
-        line_h = max(nm_h, ss_h)
-        right_margin = fs_mc_name * 1.0
-        right_edge = lc_x + lc_w - right_margin
-        name_top = cur_y + (line_h - nm_h)
-        ss_top = cur_y + (line_h - ss_h)
-        _draw_text_at_baseline(c, person.name, right_edge - nm_w - ss_w, name_top + nm_asc, _SVG_GOTHIC, fs_mc_name, DARK_BROWN)
-        _draw_text_at_baseline(c, " 先生", right_edge - ss_w, ss_top + ss_asc, _SVG_GOTHIC, fs_sensei, DARK_BROWN)
-        cur_y += line_h * 1.2
+        fs_aff = fs_mc_aff * us_aff
+        aff_lines = _wrap_jp(person.affiliation or "", _RL_GOTHIC, fs_aff, lc_w)
+        aff_h = _draw_multiline(
+            c, aff_lines, lc_x, cur_y, _RL_GOTHIC, _SVG_GOTHIC, fs_aff, DARK_BROWN, 1.2
+        )
+        cur_y += aff_h + fs_aff * 0.5
+
+        # 氏名（入力どおり。改行で複数名・敬称は小さめ・幅超過時は一律縮小）
+        name_lines = parse_name_block(person.name)
+        if name_lines:
+            fs_name_base = fs_mc_name * us_name
+            right_margin = fs_name_base * NAME_MC_RIGHT_MARGIN
+            right_edge = lc_x + lc_w - right_margin
+            fit = rl_name_fit(name_lines, fs_name_base, lc_w - right_margin)
+            metrics = rl_name_metrics(name_lines, fs_name_base, fit)
+            _draw_name_block(
+                c, metrics, right_edge, cur_y, NAME_LINE_ADVANCE_MC, _SVG_GOTHIC, DARK_BROWN
+            )
+            cur_y += rl_name_block_height(metrics, NAME_LINE_ADVANCE_MC)
 
     if data.mc:
         draw_person_row("総合司会", data.mc)
@@ -1029,33 +1075,35 @@ def render_poster_svg(
             )
 
         elif block.kind == "title":
-            fs = ph(FS_PROG_TITLE) * sc * cs
-            lines = block.data.get("lines") or _wrap_jp(block.data.get("text", ""), _RL_GOTHIC, fs, prog_w)
+            us = block.data.get("user_scale", 1.0)
+            fs = ph(FS_PROG_TITLE) * sc * cs * us
+            lines = block.data.get("lines") or []
             _draw_multiline(c, lines, prog_x, by, _RL_GOTHIC, _SVG_GOTHIC, fs, DARK_BROWN, 1.35)
 
+        elif block.kind == "subtitle":
+            us = block.data.get("user_scale", 1.0)
+            fs = ph(FS_PROG_SUBTITLE) * sc * cs * us
+            lines = block.data.get("lines") or []
+            _draw_multiline(
+                c, lines, prog_x, by, _RL_GOTHIC, _SVG_GOTHIC, fs, DARK_BROWN,
+                PROG_SUBTITLE_SPACING, font_weight="400",
+            )
+
         elif block.kind == "affiliation":
-            fs = ph(FS_PRESENTER) * sc * cs
-            lines = block.data.get("lines") or _wrap_jp(block.data.get("text", ""), _RL_GOTHIC, fs, prog_w)
+            us = block.data.get("user_scale", 1.0)
+            fs = ph(FS_PRESENTER) * sc * cs * us
+            lines = block.data.get("lines") or []
             _draw_multiline(c, lines, prog_x, by, _RL_GOTHIC, _SVG_GOTHIC, fs, DARK_BROWN, 1.25)
 
         elif block.kind == "name":
-            name = block.data.get("text", "")
-            fs_name = ph(FS_PRES_NAME) * sc * cs
-            fs_sensei = max(8.0, fs_name * 0.85)
-            nm_w = _tw(name, _RL_GOTHIC, fs_name)
-            ss_w = _tw(" 先生", _RL_GOTHIC, fs_sensei)
-            nm_asc, _, nm_h = _fm(_RL_GOTHIC, fs_name)
-            ss_asc, _, ss_h = _fm(_RL_GOTHIC, fs_sensei)
-            line_h = max(nm_h, ss_h)
-            right_edge = prog_x + prog_w
-            name_top = by + (line_h - nm_h)
-            ss_top = by + (line_h - ss_h)
-            _draw_text_at_baseline(
-                c, name, right_edge - nm_w - ss_w, name_top + nm_asc, _SVG_GOTHIC, fs_name, DARK_BROWN
-            )
-            _draw_text_at_baseline(
-                c, " 先生", right_edge - ss_w, ss_top + ss_asc, _SVG_GOTHIC, fs_sensei, DARK_BROWN
-            )
+            name_lines = block.data.get("lines") or []
+            if name_lines:
+                us = block.data.get("user_scale", 1.0)
+                base = ph(FS_PRES_NAME) * sc * cs * us
+                metrics = rl_name_metrics(name_lines, base, block.data.get("fit", 1.0))
+                _draw_name_block(
+                    c, metrics, prog_x + prog_w, by, NAME_LINE_ADVANCE_PROG, _SVG_GOTHIC, DARK_BROWN
+                )
 
     # 右ストリップ: 第N部ラベルボックス
     for i, pos in enumerate(section_positions):
